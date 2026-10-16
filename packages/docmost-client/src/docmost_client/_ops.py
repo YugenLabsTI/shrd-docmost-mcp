@@ -230,8 +230,8 @@ def create_comment(
         data = yield ("/comments/create", payload)
     except PermissionDeniedError:
         raise PermissionDeniedError(
-            "The account cannot comment on this page: it needs edit access, or the space "
-            "must allow viewer comments (space settings in Docmost).",
+            "The account cannot comment on this page: it needs edit access there (letting "
+            "readers comment is a Docmost Enterprise feature).",
             status_code=403,
         ) from None
     return _parse(Comment, _object(data))

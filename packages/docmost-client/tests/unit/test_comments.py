@@ -220,7 +220,7 @@ def test_permission_errors_explain_viewer_comments(
         return_value=httpx.Response(403, json={"message": "Forbidden", "statusCode": 403})
     )
 
-    with pytest.raises(PermissionDeniedError, match="viewer comments"):
+    with pytest.raises(PermissionDeniedError, match="edit access"):
         commenter.create_comment(PAGE_ID, "hello")
 
 

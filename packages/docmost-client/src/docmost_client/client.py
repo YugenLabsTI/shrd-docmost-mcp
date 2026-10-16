@@ -136,8 +136,8 @@ class DocmostClient:
         """Add a page-level comment (or a reply) from plain text.
 
         Requires DOCMOST_ALLOW_COMMENTS, independently of DOCMOST_READ_ONLY. Docmost
-        lets an account comment when it can edit the page, or when the space allows
-        viewer comments.
+        lets an account comment where it can edit the page (viewer comments are an
+        Enterprise feature).
         """
         return self._run(
             _ops.create_comment(self._settings, self._allowlist, page_id, text, parent_comment_id)
@@ -319,8 +319,8 @@ class AsyncDocmostClient:
         """Add a page-level comment (or a reply) from plain text.
 
         Requires DOCMOST_ALLOW_COMMENTS, independently of DOCMOST_READ_ONLY. Docmost
-        lets an account comment when it can edit the page, or when the space allows
-        viewer comments.
+        lets an account comment where it can edit the page (viewer comments are an
+        Enterprise feature).
         """
         return await self._run(
             _ops.create_comment(self._settings, self._allowlist, page_id, text, parent_comment_id)

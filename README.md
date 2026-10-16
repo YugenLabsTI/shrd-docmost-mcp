@@ -75,9 +75,12 @@ always allowed.
 | `0` | `0` | read, create and edit pages, but not comment |
 | `0` | `1` | everything above |
 
-Docmost applies its own permissions on top: the account comments when it can edit the
-page, or when the space allows viewer comments (space settings in Docmost). For a
-reader that comments, give the account the `reader` role and turn that space setting on.
+Docmost applies its own permissions on top: the account can comment where it can edit the
+page. Letting readers comment ("viewer comments") is an Enterprise feature, so on
+Community Edition an agent that comments needs the `writer` role in those spaces. In that
+setup `DOCMOST_READ_ONLY=1` is what stops it from editing pages: the server does not
+register the page write tools and the client refuses page writes. Keep the writer role
+to the spaces where comments are wanted and list them in `DOCMOST_ALLOWED_SPACES`.
 
 ### Confirming a replace
 

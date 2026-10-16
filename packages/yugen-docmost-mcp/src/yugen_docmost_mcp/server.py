@@ -467,8 +467,8 @@ def _register_comment_tool(
             "it to propose a change or ask a question instead of editing the page. The page "
             "watchers are notified. Returns the stored comment. "
             + _ERRORS
-            + "COMMENTS_DISABLED, FORBIDDEN (the account needs edit access or the space must "
-            "allow viewer comments), NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, "
+            + "COMMENTS_DISABLED, FORBIDDEN (the account needs edit access to the page), "
+            "NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, "
             "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
         ),
         annotations=_COMMENT,
