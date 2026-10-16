@@ -8,20 +8,27 @@ transport are thrown into the generator, so an operation can handle them. ``driv
 
 import re
 from collections.abc import Awaitable, Callable, Generator
+from datetime import datetime
 from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
+from docmost_client._content import check_content
 from docmost_client.errors import (
     DocmostError,
     InvalidRequestError,
     NotFoundError,
+    PermissionDeniedError,
+    ReadOnlyError,
     SpaceNotAllowedError,
+    StalePageError,
     UpstreamError,
 )
 from docmost_client.models import (
     CONTENT_FORMATS,
+    CONTENT_OPERATIONS,
     ContentFormat,
+    ContentOperation,
     CurrentUser,
     Page,
     PageSummary,
@@ -30,6 +37,7 @@ from docmost_client.models import (
     Space,
 )
 from docmost_client.policy import SpaceAllowlist
+from docmost_client.settings import DocmostSettings
 
 T = TypeVar("T")
 M = TypeVar("M", Space, PageSummary)
@@ -190,6 +198,105 @@ def search(
     data = yield ("/search", payload)
     hits = [_parse(SearchHit, item) for item in _items(data)]
     return [hit for hit in hits if allowlist.allows(hit.space.id, hit.space.slug)]
+
+
+def create_page(
+    settings: DocmostSettings,
+    allowlist: SpaceAllowlist,
+    *,
+    space: str,
+    title: str | None,
+    content: str | dict[str, Any] | None,
+    format: ContentFormat,
+    parent_page_id: str | None,
+    icon: str | None,
+) -> Op[Page]:
+    _require_writable(settings)
+    check_format(format)
+    if content is not None:
+        check_content(content, format, settings.max_content_bytes)
+    payload: dict[str, Any] = {"spaceId": (yield from resolve_space_id(allowlist, space))}
+    if title is not None:
+        payload["title"] = title
+    if icon is not None:
+        payload["icon"] = icon
+    if parent_page_id is not None:
+        payload["parentPageId"] = parent_page_id
+    if content is not None:
+        payload["content"] = content
+        payload["format"] = format
+    data = yield ("/pages/create", payload)
+    # Docmost returns the new page without its content.
+    return _parse(Page, {**_object(data), "content": None, "format": format})
+
+
+def update_page(
+    settings: DocmostSettings,
+    allowlist: SpaceAllowlist,
+    page_id: str,
+    *,
+    content: str | dict[str, Any] | None,
+    operation: ContentOperation | None,
+    format: ContentFormat,
+    title: str | None,
+    icon: str | None,
+    expected_updated_at: datetime | None,
+) -> Op[Page]:
+    _require_writable(settings)
+    check_format(format)
+    if operation is not None and operation not in CONTENT_OPERATIONS:
+        raise InvalidRequestError(f"operation must be one of: {', '.join(CONTENT_OPERATIONS)}.")
+    if content is not None and operation is None:
+        raise InvalidRequestError("content requires an operation (append, prepend, or replace).")
+    if operation is not None and content is None:
+        raise InvalidRequestError("operation requires content.")
+    if content is None and title is None and icon is None:
+        raise InvalidRequestError("Nothing to update: provide content, title, or icon.")
+    if content is not None:
+        check_content(content, format, settings.max_content_bytes)
+
+    current = yield from get_page(allowlist, page_id, format)
+    if current.is_locked:
+        raise PermissionDeniedError("The page is locked; unlock it in Docmost before editing.")
+    if current.can_edit is False:
+        raise PermissionDeniedError("The account cannot edit this page.")
+    if expected_updated_at is not None and current.updated_at != expected_updated_at:
+        raise StalePageError(
+            "The page changed since it was read: it was updated at "
+            f"{current.updated_at.isoformat()}, not {expected_updated_at.isoformat()}. "
+            "Read it again and reapply the change.",
+            current_updated_at=current.updated_at,
+        )
+
+    # Never send spaceId or parentPageId: v0.96.0 ignores them, a later version may not.
+    payload: dict[str, Any] = {"pageId": current.id}
+    if title is not None:
+        payload["title"] = title
+    if icon is not None:
+        payload["icon"] = icon
+    if content is not None:
+        payload["content"] = content
+        payload["operation"] = operation
+    payload["format"] = format
+    data = yield ("/pages/update", payload)
+    result = _parse(Page, {**_object(data), "format": format})
+    unchanged = result.content == current.content
+    if (
+        content is not None
+        and unchanged
+        and not (operation == "replace" and content == current.content)
+    ):
+        raise UpstreamError(
+            "Docmost accepted the update but the page content did not change. Content writes "
+            "are a silent no-op when the server runs with COLLAB_DISABLE_REDIS=true, or when "
+            "the server failed to persist the document; check the Docmost logs."
+        )
+    return result
+
+
+def _require_writable(settings: DocmostSettings) -> None:
+    if settings.read_only:
+        raise ReadOnlyError("Writes are disabled; set DOCMOST_READ_ONLY=0 to enable them.")
 
 
 def _fetch_space(space: str) -> Op[Space]:

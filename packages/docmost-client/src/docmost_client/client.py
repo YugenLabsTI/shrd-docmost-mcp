@@ -4,6 +4,7 @@
 the I/O-free operations in ``_ops`` against a session.
 """
 
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self, TypeVar
 
@@ -11,6 +12,7 @@ from docmost_client import _ops, compat
 from docmost_client.models import (
     CompatibilityReport,
     ContentFormat,
+    ContentOperation,
     CurrentUser,
     Page,
     PageSummary,
@@ -126,6 +128,64 @@ class DocmostClient:
         """Full-text search over pages the account can read."""
         return self._run(_ops.search(self._allowlist, query, space, limit, offset, title_only))
 
+    def create_page(
+        self,
+        *,
+        space: str,
+        title: str | None = None,
+        content: str | dict[str, Any] | None = None,
+        format: ContentFormat = "markdown",
+        parent_page_id: str | None = None,
+        icon: str | None = None,
+    ) -> Page:
+        """Create a page in ``space`` (UUID or slug), optionally under a parent page.
+
+        The returned page has no content: Docmost does not echo it on creation.
+        """
+        return self._run(
+            _ops.create_page(
+                self._settings,
+                self._allowlist,
+                space=space,
+                title=title,
+                content=content,
+                format=format,
+                parent_page_id=parent_page_id,
+                icon=icon,
+            )
+        )
+
+    def update_page(
+        self,
+        page_id: str,
+        *,
+        content: str | dict[str, Any] | None = None,
+        operation: ContentOperation | None = None,
+        format: ContentFormat = "markdown",
+        title: str | None = None,
+        icon: str | None = None,
+        expected_updated_at: datetime | None = None,
+    ) -> Page:
+        """Update a page's content and/or title, returning the page as stored.
+
+        The page is read first; the update is refused when it is locked, not editable,
+        in the trash, outside the allowlist, or (with ``expected_updated_at``) changed
+        since the caller read it.
+        """
+        return self._run(
+            _ops.update_page(
+                self._settings,
+                self._allowlist,
+                page_id,
+                content=content,
+                operation=operation,
+                format=format,
+                title=title,
+                icon=icon,
+                expected_updated_at=expected_updated_at,
+            )
+        )
+
     def _run(self, op: _ops.Op[T]) -> T:
         return _ops.drive(op, self._call)
 
@@ -226,6 +286,64 @@ class AsyncDocmostClient:
         """Full-text search over pages the account can read."""
         return await self._run(
             _ops.search(self._allowlist, query, space, limit, offset, title_only)
+        )
+
+    async def create_page(
+        self,
+        *,
+        space: str,
+        title: str | None = None,
+        content: str | dict[str, Any] | None = None,
+        format: ContentFormat = "markdown",
+        parent_page_id: str | None = None,
+        icon: str | None = None,
+    ) -> Page:
+        """Create a page in ``space`` (UUID or slug), optionally under a parent page.
+
+        The returned page has no content: Docmost does not echo it on creation.
+        """
+        return await self._run(
+            _ops.create_page(
+                self._settings,
+                self._allowlist,
+                space=space,
+                title=title,
+                content=content,
+                format=format,
+                parent_page_id=parent_page_id,
+                icon=icon,
+            )
+        )
+
+    async def update_page(
+        self,
+        page_id: str,
+        *,
+        content: str | dict[str, Any] | None = None,
+        operation: ContentOperation | None = None,
+        format: ContentFormat = "markdown",
+        title: str | None = None,
+        icon: str | None = None,
+        expected_updated_at: datetime | None = None,
+    ) -> Page:
+        """Update a page's content and/or title, returning the page as stored.
+
+        The page is read first; the update is refused when it is locked, not editable,
+        in the trash, outside the allowlist, or (with ``expected_updated_at``) changed
+        since the caller read it.
+        """
+        return await self._run(
+            _ops.update_page(
+                self._settings,
+                self._allowlist,
+                page_id,
+                content=content,
+                operation=operation,
+                format=format,
+                title=title,
+                icon=icon,
+                expected_updated_at=expected_updated_at,
+            )
         )
 
     async def _run(self, op: _ops.Op[T]) -> T:

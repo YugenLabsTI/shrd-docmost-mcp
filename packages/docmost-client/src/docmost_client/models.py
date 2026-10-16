@@ -21,6 +21,15 @@ ContentFormat = Literal["markdown", "html", "json"]
 
 CONTENT_FORMATS: tuple[ContentFormat, ...] = ("markdown", "html", "json")
 
+ContentOperation = Literal["append", "prepend", "replace"]
+"""How written content combines with the page.
+
+``append``/``prepend`` insert top-level blocks and merge safely with concurrent editors.
+``replace`` deletes the whole page body first, including edits made after it was read.
+"""
+
+CONTENT_OPERATIONS: tuple[ContentOperation, ...] = ("append", "prepend", "replace")
+
 Compatibility = Literal["supported", "untested", "unknown"]
 
 T = TypeVar("T")
