@@ -452,3 +452,29 @@ async def test_failed_compatibility_lookups_are_retried(wiki: FakeWiki) -> None:
 
     assert first.structured_content["error"]["code"] == "UPSTREAM_ERROR"
     assert second.is_error is False
+
+
+async def test_explicit_nulls_for_optional_arguments_mean_not_given(wiki: FakeWiki) -> None:
+    server = build_server(wiki, writer=wiki)
+    async with Client(server) as client:
+        listed = await client.call_tool(
+            "list_children", {"space": "engineering", "parent_page_id": None, "cursor": None}
+        )
+        searched = await client.call_tool("search", {"query": "x", "space": None})
+        updated = await client.call_tool(
+            "update_page",
+            {
+                "page_id": "p1",
+                "expected_updated_at": "2026-10-16T10:00:00Z",
+                "title": "Renamed",
+                "content": None,
+            },
+        )
+
+    assert not listed.is_error
+    assert not searched.is_error
+    assert not updated.is_error
+    calls = {name: kwargs for name, kwargs in wiki.calls}
+    assert calls["list_children"]["parent_page_id"] is None
+    assert calls["search"]["space"] is None
+    assert calls["update_page"]["content"] is None

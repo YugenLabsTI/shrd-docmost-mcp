@@ -32,7 +32,10 @@ def anyio_backend() -> str:
 def settings(**overrides: str) -> DocmostSettings:
     env = {key: value for key, value in os.environ.items() if key.startswith("DOCMOST_")}
     env.update(overrides)
-    return DocmostSettings.from_env(env)
+    settings = DocmostSettings.from_env(env)
+    # Never write to a real instance (S14): these tests only target dev/docmost.
+    assert settings.base_url.startswith(("http://localhost", "http://127.0.0.1"))
+    return settings
 
 
 async def test_agent_workflow_over_mcp() -> None:

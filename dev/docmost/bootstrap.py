@@ -6,6 +6,7 @@ credentials to dev/docmost/.env.test (git-ignored). Refuses any non-local base U
     uv run python dev/docmost/bootstrap.py
 """
 
+import os
 import secrets
 import subprocess
 import sys
@@ -83,7 +84,7 @@ def main() -> None:
         )
 
     _seed_pages(admin_password)
-    ENV_TEST.write_text(
+    credentials = (
         f"DOCMOST_BASE_URL={BASE_URL}\n"
         "DOCMOST_ALLOW_INSECURE_HTTP=1\n"
         f"DOCMOST_ADMIN_EMAIL={ADMIN_EMAIL}\n"
@@ -91,7 +92,10 @@ def main() -> None:
         f"DOCMOST_EMAIL={AGENT_EMAIL}\n"
         f"DOCMOST_PASSWORD={agent_password}\n"
     )
-    ENV_TEST.chmod(0o600)
+    # Create the file with owner-only permissions from the start.
+    fd = os.open(ENV_TEST, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write(credentials)
     print(f"Seeded {BASE_URL}; credentials in {ENV_TEST.relative_to(Path.cwd())}")
 
 

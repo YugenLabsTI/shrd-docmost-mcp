@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, ParamSpec, TypeVar, cast
 import anyio
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, BeforeValidator, Field
 
 from docmost_client import DocmostError, InvalidRequestError, UnsupportedVersionError
 from yugen_docmost_mcp._version import __version__
@@ -33,6 +33,16 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 Format = Literal["markdown", "html", "json"]
+
+
+def _null_to_empty(value: object) -> object:
+    return "" if value is None else value
+
+
+# Optional text argument: "" means "not given", and an explicit JSON null is accepted as
+# "". The annotation must stay plain `str` for the SDK not to JSON-decode the value
+# (see _decode), so null handling lives in a validator instead of `str | None`.
+OptionalText = Annotated[str, BeforeValidator(_null_to_empty)]
 Operation = Literal["append", "prepend", "replace"]
 
 _READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
@@ -161,7 +171,7 @@ def _register_read_tools(
 ) -> None:
     async def search(
         query: Annotated[str, Field(description="Words to find in page titles and text.")],
-        space: Annotated[str, Field(description="Limit to one space (slug or id).")] = "",
+        space: Annotated[OptionalText, Field(description="Limit to one space (slug or id).")] = "",
         limit: Annotated[int, Field(ge=1, le=50, description="Maximum hits (1-50).")] = 10,
         offset: Annotated[int, Field(ge=0, description="Hits to skip, for paging.")] = 0,
         title_only: Annotated[bool, Field(description="Match titles only.")] = False,
@@ -175,9 +185,13 @@ def _register_read_tools(
         )
 
     async def list_spaces(
-        query: Annotated[str, Field(description="Filter by space name or description.")] = "",
+        query: Annotated[
+            OptionalText, Field(description="Filter by space name or description.")
+        ] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
-        cursor: Annotated[str, Field(description="next_cursor from a previous call.")] = "",
+        cursor: Annotated[
+            OptionalText, Field(description="next_cursor from a previous call.")
+        ] = "",
     ) -> SpacesResult:
         page = await reader.list_spaces(limit=limit, cursor=cursor or None, query=query or None)
         return SpacesResult(
@@ -194,13 +208,15 @@ def _register_read_tools(
 
     async def list_children(
         space: Annotated[
-            str, Field(description="Space slug or id: list its top-level pages.")
+            OptionalText, Field(description="Space slug or id: list its top-level pages.")
         ] = "",
         parent_page_id: Annotated[
-            str, Field(description="Page id or slug id: list its child pages.")
+            OptionalText, Field(description="Page id or slug id: list its child pages.")
         ] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
-        cursor: Annotated[str, Field(description="next_cursor from a previous call.")] = "",
+        cursor: Annotated[
+            OptionalText, Field(description="next_cursor from a previous call.")
+        ] = "",
     ) -> ChildrenResult:
         page = await reader.list_children(
             space=space or None,
@@ -287,12 +303,12 @@ def _register_write_tools(
         space: Annotated[str, Field(description="Space slug or id to create the page in.")],
         title: Annotated[str, Field(min_length=1, description="Page title.")],
         content: Annotated[
-            str,
+            OptionalText,
             Field(description="Initial content in `format`; for json, a JSON-encoded document."),
         ] = "",
         format: Annotated[Format, Field(description="Format of content.")] = "markdown",
         parent_page_id: Annotated[
-            str, Field(description="Create under this page (id or slug id).")
+            OptionalText, Field(description="Create under this page (id or slug id).")
         ] = "",
     ) -> PageInfo:
         page = await writer.create_page(
@@ -314,7 +330,7 @@ def _register_write_tools(
             ),
         ],
         content: Annotated[
-            str,
+            OptionalText,
             Field(description="Content in `format`; for json, a JSON-encoded document."),
         ] = "",
         operation: Annotated[
@@ -322,7 +338,9 @@ def _register_write_tools(
             Field(description="Required with content: append, prepend, or replace."),
         ] = None,
         format: Annotated[Format, Field(description="Format of content.")] = "markdown",
-        title: Annotated[str, Field(description="New title; empty keeps the current one.")] = "",
+        title: Annotated[
+            OptionalText, Field(description="New title; empty keeps the current one.")
+        ] = "",
     ) -> PageContent:
         page = await writer.update_page(
             page_id,

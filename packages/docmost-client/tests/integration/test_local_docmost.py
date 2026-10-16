@@ -9,7 +9,7 @@ Clients are shared per module because Docmost allows 10 logins per minute per IP
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 import pytest
 
@@ -117,6 +117,10 @@ def test_reader_role_cannot_write_and_nothing_is_sent(writer: DocmostClient, ric
     with pytest.raises(PermissionDeniedError, match="cannot edit"):
         writer.update_page(rich.id, content="x", operation="append")
 
+    # Docmost bumps updatedAt on every update request, so an unchanged value proves
+    # that no update reached the server.
+    assert writer.get_page(rich.id, format="html").updated_at == rich.updated_at
+
 
 def test_read_only_client_refuses_writes(reader: DocmostClient) -> None:
     with pytest.raises(ReadOnlyError):
@@ -183,9 +187,14 @@ def test_html_round_trip_preserves_rich_content(writer: DocmostClient, rich: Pag
 def test_precheck_tolerates_equal_instants_in_other_offsets(writer: DocmostClient) -> None:
     page = writer.create_page(space="sandbox", title=f"Offset {uuid.uuid4().hex[:8]}", content="a")
     current = writer.get_page(page.id)
-    shifted = current.updated_at.astimezone(tz=None) + timedelta(0)
+    shifted = current.updated_at.astimezone(timezone(timedelta(hours=-5)))
+    assert shifted.utcoffset() != current.updated_at.utcoffset()
 
-    writer.update_page(page.id, content="b", operation="append", expected_updated_at=shifted)
+    result = writer.update_page(
+        page.id, content="b", operation="append", expected_updated_at=shifted
+    )
+
+    assert result.updated_at > current.updated_at
 
 
 def test_front_matter_guard_runs_before_any_request(writer: DocmostClient) -> None:
