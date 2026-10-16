@@ -8,12 +8,14 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from docmost_client import (
+    Comment,
     CompatibilityReport,
     ContentFormat,
     ContentOperation,
     Page,
     PageSummary,
     Paginated,
+    RecentPage,
     SearchResults,
     Space,
 )
@@ -35,6 +37,20 @@ class WikiReader(Protocol):
     async def list_children(
         self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
     ) -> Paginated[PageSummary]: ...
+
+    async def list_recent_pages(
+        self, *, space: str | None, limit: int, cursor: str | None
+    ) -> Paginated[RecentPage]: ...
+
+    async def list_comments(
+        self, page_id: str, *, limit: int, cursor: str | None
+    ) -> Paginated[Comment]: ...
+
+
+class WikiCommenter(Protocol):
+    async def create_comment(
+        self, page_id: str, text: str, *, parent_comment_id: str | None
+    ) -> Comment: ...
 
 
 class WikiWriter(Protocol):

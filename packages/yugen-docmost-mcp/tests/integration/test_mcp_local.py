@@ -102,5 +102,12 @@ async def test_read_only_server_has_no_write_tools() -> None:
         names = {tool.name for tool in (await client.list_tools()).tools}
         result = await client.call_tool("list_spaces", {})
 
-    assert names == {"search", "list_spaces", "get_page", "list_children"}
+    assert names == {
+        "search",
+        "list_spaces",
+        "get_page",
+        "list_children",
+        "list_recent_pages",
+        "list_comments",
+    }
     assert result.is_error is False

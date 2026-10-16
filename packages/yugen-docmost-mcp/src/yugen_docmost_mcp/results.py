@@ -9,9 +9,11 @@ from mcp_types import CallToolResult, TextContent
 from pydantic import BaseModel, ConfigDict
 
 from docmost_client import (
+    Comment,
     DocmostError,
     Page,
     PageSummary,
+    RecentPage,
     SearchHit,
     Space,
     SpaceRef,
@@ -145,6 +147,60 @@ class ChildItem(_Result):
 
 class ChildrenResult(_Result):
     pages: list[ChildItem]
+    next_cursor: str | None
+
+
+class RecentPageItem(_Result):
+    id: str
+    slug_id: str
+    title: str | None
+    parent_page_id: str | None
+    space: SpaceBrief
+    updated_at: datetime
+
+    @classmethod
+    def of(cls, page: RecentPage) -> "RecentPageItem":
+        return cls(
+            id=page.id,
+            slug_id=page.slug_id,
+            title=page.title,
+            parent_page_id=page.parent_page_id,
+            space=SpaceBrief.of(page.space),
+            updated_at=page.updated_at,
+        )
+
+
+class RecentPagesResult(_Result):
+    pages: list[RecentPageItem]
+    next_cursor: str | None
+
+
+class CommentItem(_Result):
+    id: str
+    parent_comment_id: str | None
+    type: str | None
+    selection: str | None
+    text: str
+    author: str | None
+    created_at: datetime
+    resolved: bool
+
+    @classmethod
+    def of(cls, comment: Comment) -> "CommentItem":
+        return cls(
+            id=comment.id,
+            parent_comment_id=comment.parent_comment_id,
+            type=comment.type,
+            selection=comment.selection,
+            text=comment.text,
+            author=comment.creator_name,
+            created_at=comment.created_at,
+            resolved=comment.resolved_at is not None,
+        )
+
+
+class CommentsResult(_Result):
+    comments: list[CommentItem]
     next_cursor: str | None
 
 
