@@ -65,4 +65,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - run: uv build --all-packages
+      - run: uv build --all-packages -o dist
+      - name: Install the built wheels in a clean environment and run them
+        # Catches packaging gaps the tests cannot see (they run against the sources):
+        # missing modules or data files, a broken entry point, unresolvable dependencies.
+        working-directory: ${{ runner.temp }}
+        run: |
+          uv venv --python 3.12 wheel-env
+          VIRTUAL_ENV="$PWD/wheel-env" uv pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          wheel-env/bin/yugen-docmost-mcp --version
+          wheel-env/bin/python -I -c "import docmost_client, yugen_docmost_mcp"
