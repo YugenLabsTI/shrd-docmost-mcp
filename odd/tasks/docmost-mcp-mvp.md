@@ -30,7 +30,7 @@ Test runner: `uv run pytest` (respx for HTTP mocks); lint `uv run ruff check`, t
 | T0 | S5, S15 | delegated (parallel with T1, disjoint surface `docs/docmost-api-v0.96.0.md`) | done | L11; commit `docs: add Docmost v0.96.0 API reference` |
 | T1 | S1-S3, S11, S16 | inline | done | L8; commit `chore: scaffold uv workspace` |
 | T2 | S6, S7, S8, S10 | inline | done | L9; commit `feat(client): load secure settings from environment` |
-| T3 | S1, S6, S10 | inline | pending | |
+| T3 | S1, S6, S10 | inline | done (verifier pending) | L12; commit `feat(client): add authenticated sync and async sessions` |
 | T4 | S1, S4, S5, S12, S15 | inline | pending | |
 | T5 | S8, S9 | inline | pending | |
 | T6 | S4, S5, S15 | inline | pending | |
@@ -141,3 +141,4 @@ Forecast: ~3000 authored changed lines → exceeds 400; chain strategy to be con
   - T5/T6: treat `deletedAt != null` as `NOT_FOUND`; refuse writes on `isLocked` pages; always send `format`; never send `spaceId`/`parentPageId` on update; reject markdown content starting with `---` (front-matter regex deletes content) with a hint to use html; reject agent content containing mention nodes (fake notifications) — assumption, fail closed; `max_content_bytes` default 1,000,000 stays under Fastify 1 MiB.
   - T7 tool guidance: read markdown for comprehension; `replace` on rich pages via html round-trip (lossless enough); markdown append/prepend fine; json for exact structure.
   - Open questions needing a disposable local Docmost 0.96.0 (never the live instance): error bodies 413/429/400, content without format, Set-Cookie behind proxy, markdown fidelity of tables/details/embeds, replace during live typing, json validation strictness, `/api/version` offline.
+- **L12 (2026-10-16, T3 evidence):** RED: collection ImportError. First GREEN attempt failed `test_logs_in_once_and_sends_bearer_token_only` — the cookie jar still stored `authToken` because httpx copies an `httpx.Cookies` into a default jar (dropping the policy); fixed by passing a `CookieJar` with a reject-all policy directly. GREEN: 88 passed (sync and async parametrized); ruff, pyright strict on src (tests on standard because respx is partially typed) clean. Sync/async share `_protocol.py` (I/O-free); `anyio` added as an explicit dep (already transitive via httpx) for the async login lock.

@@ -49,7 +49,8 @@ ban-relative-imports = "all"
 [tool.pyright]
 include = ["packages"]
 pythonVersion = "3.11"
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
+strict = ["packages/*/src"]
 reportMissingTypeStubs = true
 venvPath = "."
 venv = ".venv"
