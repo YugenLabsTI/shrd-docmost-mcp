@@ -28,6 +28,9 @@ dev = [
 testpaths = ["packages"]
 addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true
+markers = [
+    "integration: needs the local Docmost from dev/docmost (DOCMOST_INTEGRATION=1)",
+]
 filterwarnings = ["error"]
 
 [tool.ruff]
