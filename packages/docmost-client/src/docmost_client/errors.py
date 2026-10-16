@@ -67,3 +67,9 @@ class UnsupportedVersionError(DocmostError):
     """The Docmost server runs a version this client has not been tested against."""
 
     code: ClassVar[str] = "UNSUPPORTED_VERSION"
+
+
+class SpaceNotAllowedError(DocmostError):
+    """The resource belongs to a space outside DOCMOST_ALLOWED_SPACES."""
+
+    code: ClassVar[str] = "SPACE_NOT_ALLOWED"

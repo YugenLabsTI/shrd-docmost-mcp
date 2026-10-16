@@ -12,7 +12,13 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from docmost_client.errors import DocmostError, InvalidRequestError, NotFoundError, UpstreamError
+from docmost_client.errors import (
+    DocmostError,
+    InvalidRequestError,
+    NotFoundError,
+    SpaceNotAllowedError,
+    UpstreamError,
+)
 from docmost_client.models import (
     CONTENT_FORMATS,
     ContentFormat,
@@ -23,6 +29,7 @@ from docmost_client.models import (
     SearchHit,
     Space,
 )
+from docmost_client.policy import SpaceAllowlist
 
 T = TypeVar("T")
 M = TypeVar("M", Space, PageSummary)
@@ -84,59 +91,89 @@ def server_version() -> Op[str | None]:
     return version if isinstance(version, str) and version else None
 
 
-def list_spaces(limit: int, cursor: str | None, query: str | None) -> Op[Paginated[Space]]:
+def list_spaces(
+    allowlist: SpaceAllowlist, limit: int, cursor: str | None, query: str | None
+) -> Op[Paginated[Space]]:
     payload = _pagination(limit, cursor)
     if query:
         payload["query"] = query
     data = yield ("/spaces", payload)
-    return _paginated(Space, data)
+    page = _paginated(Space, data)
+    visible = [space for space in page.items if allowlist.allows(space.id, space.slug)]
+    return page.model_copy(update={"items": visible})
 
 
-def get_space(space: str) -> Op[Space]:
-    if not space.strip():
-        raise InvalidRequestError("space must be a space slug or ID.")
-    data = yield ("/spaces/info", {"spaceId": space})
-    return _parse(Space, _object(data))
+def get_space(allowlist: SpaceAllowlist, space: str) -> Op[Space]:
+    resolved = yield from _fetch_space(space)
+    yield from require_space(allowlist, resolved.id, resolved.slug)
+    return resolved
 
 
-def resolve_space_id(space: str) -> Op[str]:
-    """Return the UUID of a space given its UUID or slug."""
+def resolve_space_id(allowlist: SpaceAllowlist, space: str) -> Op[str]:
+    """Return the UUID of an allowed space given its UUID or slug."""
     if is_uuid(space):
+        yield from require_space(allowlist, space, None)
         return space
-    resolved = yield from get_space(space)
+    resolved = yield from get_space(allowlist, space)
     return resolved.id
 
 
-def get_page(page_id: str, format: ContentFormat) -> Op[Page]:
+def require_space(allowlist: SpaceAllowlist, space_id: str, slug: str | None) -> Op[None]:
+    """Raise SpaceNotAllowedError unless the space is in the allowlist."""
+    decision = allowlist.allows(space_id, slug)
+    if decision is None:
+        yield from _resolve_allowlist(allowlist)
+        decision = allowlist.allows(space_id, None)
+    if not decision:
+        raise SpaceNotAllowedError(
+            "The space is not in DOCMOST_ALLOWED_SPACES; this client cannot access it."
+        )
+
+
+def get_page(allowlist: SpaceAllowlist, page_id: str, format: ContentFormat) -> Op[Page]:
     check_format(format)
     if not page_id.strip():
         raise InvalidRequestError("page_id must be a page ID or slug ID.")
     data = yield ("/pages/info", {"pageId": page_id, "format": format})
     page = _parse(Page, {**_object(data), "format": format})
+    slug = page.space.slug if page.space is not None else None
+    yield from require_space(allowlist, page.space_id, slug)
     if page.deleted_at is not None:
         raise NotFoundError("The page is in the trash.")
     return page
 
 
 def list_children(
-    space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
+    allowlist: SpaceAllowlist,
+    space: str | None,
+    parent_page_id: str | None,
+    limit: int,
+    cursor: str | None,
 ) -> Op[Paginated[PageSummary]]:
     payload = _pagination(limit, cursor)
     if parent_page_id:
         if not is_uuid(parent_page_id):
-            parent = yield from get_page(parent_page_id, "markdown")
+            parent = yield from get_page(allowlist, parent_page_id, "markdown")
             parent_page_id = parent.id
         payload["pageId"] = parent_page_id
     elif space:
-        payload["spaceId"] = yield from resolve_space_id(space)
+        payload["spaceId"] = yield from resolve_space_id(allowlist, space)
     else:
         raise InvalidRequestError("Provide a space or parent_page_id.")
     data = yield ("/pages/sidebar-pages", payload)
-    return _paginated(PageSummary, data)
+    page = _paginated(PageSummary, data)
+    for space_id in {item.space_id for item in page.items}:
+        yield from require_space(allowlist, space_id, None)
+    return page
 
 
 def search(
-    query: str, space: str | None, limit: int, offset: int, title_only: bool
+    allowlist: SpaceAllowlist,
+    query: str,
+    space: str | None,
+    limit: int,
+    offset: int,
+    title_only: bool,
 ) -> Op[list[SearchHit]]:
     query = query.strip()
     if not query:
@@ -147,11 +184,33 @@ def search(
         raise InvalidRequestError("offset must not be negative.")
     payload: dict[str, Any] = {"query": query, "limit": limit, "offset": offset}
     if space:
-        payload["spaceId"] = yield from resolve_space_id(space)
+        payload["spaceId"] = yield from resolve_space_id(allowlist, space)
     if title_only:
         payload["titleOnly"] = True
     data = yield ("/search", payload)
-    return [_parse(SearchHit, item) for item in _items(data)]
+    hits = [_parse(SearchHit, item) for item in _items(data)]
+    return [hit for hit in hits if allowlist.allows(hit.space.id, hit.space.slug)]
+
+
+def _fetch_space(space: str) -> Op[Space]:
+    if not space.strip():
+        raise InvalidRequestError("space must be a space slug or ID.")
+    data = yield ("/spaces/info", {"spaceId": space})
+    return _parse(Space, _object(data))
+
+
+def _resolve_allowlist(allowlist: SpaceAllowlist) -> Op[None]:
+    ids: set[str] = set()
+    for entry in sorted(allowlist.entries or ()):
+        if is_uuid(entry):
+            ids.add(entry)
+            continue
+        try:
+            space = yield from _fetch_space(entry)
+        except NotFoundError:
+            continue  # Unknown or inaccessible spaces grant nothing.
+        ids.add(space.id)
+    allowlist.resolved(frozenset(ids))
 
 
 def check_format(format: str) -> None:
