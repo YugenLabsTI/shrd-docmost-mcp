@@ -250,3 +250,17 @@ def test_ipv6_hosts_keep_their_brackets() -> None:
     settings = DocmostSettings.from_env(env(DOCMOST_BASE_URL="https://[::1]:8443/wiki/"))
 
     assert settings.base_url == "https://[::1]:8443/wiki"
+
+
+def test_comments_are_disabled_by_default_and_independent_of_read_only() -> None:
+    assert DocmostSettings.from_env(env()).allow_comments is False
+    reader = DocmostSettings.from_env(env(DOCMOST_ALLOW_COMMENTS="1"))
+    assert reader.allow_comments is True
+    assert reader.read_only is True
+    writer = DocmostSettings.from_env(env(DOCMOST_READ_ONLY="0"))
+    assert writer.allow_comments is False
+
+
+def test_invalid_comments_flag_is_rejected() -> None:
+    with pytest.raises(ConfigError, match="DOCMOST_ALLOW_COMMENTS"):
+        DocmostSettings.from_env(env(DOCMOST_ALLOW_COMMENTS="sometimes"))

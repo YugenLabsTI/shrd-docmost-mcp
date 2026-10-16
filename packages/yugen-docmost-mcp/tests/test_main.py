@@ -10,9 +10,9 @@ import pytest
 import respx
 from mcp import Client
 
-from docmost_client import DocmostSettings
+from docmost_client import ConfigError, DocmostSettings
 from yugen_docmost_mcp import __version__
-from yugen_docmost_mcp.__main__ import create_server, main
+from yugen_docmost_mcp.__main__ import confirm_replace_from_env, create_server, main
 
 BASE = "https://wiki.example.com"
 API = f"{BASE}/api"
@@ -135,3 +135,17 @@ async def test_shutdown_logs_out_to_revoke_the_session(api: respx.MockRouter) ->
         await client.call_tool("search", {"query": "worker"})
 
     assert api.routes["logout"].call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"), [(None, True), ("1", True), ("true", True), ("0", False), ("no", False)]
+)
+def test_replace_confirmation_flag(raw: str | None, expected: bool) -> None:
+    environ = {} if raw is None else {"DOCMOST_CONFIRM_REPLACE": raw}
+
+    assert confirm_replace_from_env(environ) is expected
+
+
+def test_invalid_replace_confirmation_flag_is_a_config_error() -> None:
+    with pytest.raises(ConfigError, match="DOCMOST_CONFIRM_REPLACE"):
+        confirm_replace_from_env({"DOCMOST_CONFIRM_REPLACE": "maybe"})

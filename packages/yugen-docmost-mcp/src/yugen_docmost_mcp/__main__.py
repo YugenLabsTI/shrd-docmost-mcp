@@ -1,15 +1,23 @@
 """Command-line entry point: ``yugen-docmost-mcp`` serves MCP over stdio."""
 
 import logging
+import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
 from docmost_client import AsyncDocmostClient, ConfigError, DocmostSettings
+from docmost_client.settings import env_flag
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.server import build_server
+
+
+def confirm_replace_from_env(environ: Mapping[str, str] | None = None) -> bool:
+    """DOCMOST_CONFIRM_REPLACE (default true): ask the user before a replace."""
+    env = os.environ if environ is None else environ
+    return env_flag(env, "DOCMOST_CONFIRM_REPLACE", default=True)
 
 
 def create_server(settings: DocmostSettings) -> MCPServer[Any]:
