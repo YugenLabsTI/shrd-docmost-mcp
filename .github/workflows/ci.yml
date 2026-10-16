@@ -66,15 +66,27 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: uv build --all-packages -o dist
+      - name: Pin the wheel check to the lockfile
+        run: >-
+          uv export --locked --all-packages --no-dev --no-emit-workspace --no-hashes
+          --format requirements.txt -o "$RUNNER_TEMP/constraints.txt"
       - name: Install the built wheels in a clean environment and run them
         # Catches packaging gaps the tests cannot see (they run against the sources):
-        # missing modules or data files, a broken entry point, unresolvable dependencies.
-        # Dependencies resolve fresh from PyPI on purpose, as a user's install would: the
-        # test jobs already cover the locked versions, this one warns when a new upstream
-        # release breaks installation. The job has no secrets and read-only permissions.
+        # modules missing from a wheel, a broken entry point, metadata that cannot install.
+        # Dependencies are pinned to uv.lock and only prebuilt wheels are accepted, so the
+        # result depends on this commit alone and no third-party build code runs here;
+        # dependency updates arrive separately through Dependabot.
+        # Python 3.11 is the oldest version in both packages' requires-python.
+        # The version check and imports below name the workspace packages: keep them in
+        # sync when a package is added.
         working-directory: ${{ runner.temp }}
         run: |
-          uv venv --python 3.12 wheel-env
-          VIRTUAL_ENV="$PWD/wheel-env" uv pip install "$GITHUB_WORKSPACE"/dist/*.whl
-          wheel-env/bin/yugen-docmost-mcp --version
+          uv venv --python 3.11 wheel-env
+          VIRTUAL_ENV="$PWD/wheel-env" uv pip install --only-binary :all: \
+            --constraints constraints.txt "$GITHUB_WORKSPACE"/dist/*.whl
+          wheel=$(basename "$GITHUB_WORKSPACE"/dist/yugen_docmost_mcp-*.whl)
+          expected="yugen-docmost-mcp $(echo "$wheel" | cut -d- -f2)"
+          actual=$(wheel-env/bin/yugen-docmost-mcp --version)
+          echo "expected: $expected / actual: $actual"
+          test "$actual" = "$expected"
           wheel-env/bin/python -I -c "import docmost_client, yugen_docmost_mcp"
