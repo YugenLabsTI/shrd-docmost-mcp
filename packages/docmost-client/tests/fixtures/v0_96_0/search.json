@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000c1", "slugId": "abc123xyz0", "title": "Runbook", "icon": null,
+      "parentPageId": null, "creatorId": "0192b7a4-0000-7000-8000-000000000002",
+      "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-10-16T10:00:00.000Z",
+      "rank": 0.0759, "highlight": "... restart the <b>worker</b> pool ...",
+      "space": {"id": "0192b7a4-0000-7000-8000-0000000000b1", "name": "Engineering", "slug": "engineering"},
+      "wholeWord": true, "matchedText": ["worker"]
+    }
+  ]
+}

@@ -61,3 +61,9 @@ class UpstreamError(DocmostError):
     """Docmost was unreachable or answered with an unexpected response."""
 
     code: ClassVar[str] = "UPSTREAM_ERROR"
+
+
+class UnsupportedVersionError(DocmostError):
+    """The Docmost server runs a version this client has not been tested against."""
+
+    code: ClassVar[str] = "UNSUPPORTED_VERSION"

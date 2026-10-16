@@ -1,0 +1,20 @@
+{
+  "user": {
+    "id": "0192b7a4-0000-7000-8000-000000000001", "email": "bot@example.com", "name": "Wiki Bot",
+    "emailVerifiedAt": null, "avatarUrl": null, "role": "member",
+    "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "locale": "en-US", "timezone": null,
+    "settings": null, "lastLoginAt": "2026-10-16T09:00:00.000Z", "deactivatedAt": null,
+    "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-10-16T09:00:00.000Z",
+    "deletedAt": null, "hasGeneratedPassword": false
+  },
+  "workspace": {
+    "id": "0192b7a4-0000-7000-8000-0000000000aa", "name": "Yugen", "description": null,
+    "logo": null, "hostname": null, "customDomain": null, "defaultRole": "member",
+    "defaultSpaceId": "0192b7a4-0000-7000-8000-0000000000b1", "emailDomains": [],
+    "enforceSso": false, "enforceMfa": false, "isScimEnabled": false, "settings": null,
+    "plan": null, "status": null, "billingEmail": null, "stripeCustomerId": null,
+    "trialEndAt": null, "auditRetentionDays": 0, "trashRetentionDays": 0,
+    "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z",
+    "deletedAt": null, "memberCount": 3
+  }
+}

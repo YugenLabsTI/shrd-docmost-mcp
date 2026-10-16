@@ -199,3 +199,54 @@ def test_reads_process_environment_by_default(monkeypatch: pytest.MonkeyPatch) -
         monkeypatch.setenv(key, value)
 
     assert DocmostSettings.from_env().email == "bot@example.com"
+
+
+def test_untested_docmost_versions_are_refused_by_default() -> None:
+    assert DocmostSettings.from_env(env()).allow_untested_version is False
+    assert (
+        DocmostSettings.from_env(env(DOCMOST_ALLOW_UNTESTED_VERSION="1")).allow_untested_version
+        is True
+    )
+
+
+def test_empty_direct_value_defers_to_the_file_variant(tmp_path: Path) -> None:
+    password_file = tmp_path / "password"
+    password_file.write_text(SECRET)
+
+    settings = DocmostSettings.from_env(
+        env(DOCMOST_PASSWORD="", DOCMOST_PASSWORD_FILE=str(password_file))
+    )
+
+    assert settings.password.get_secret_value() == SECRET
+
+
+def test_oversized_secret_file_is_rejected(tmp_path: Path) -> None:
+    password_file = tmp_path / "password"
+    password_file.write_bytes(b"x" * (64 * 1024 + 1))
+
+    with pytest.raises(ConfigError, match="too large"):
+        DocmostSettings.from_env(
+            env(DOCMOST_PASSWORD="<unset>", DOCMOST_PASSWORD_FILE=str(password_file))
+        )
+
+
+def test_non_utf8_secret_file_is_rejected(tmp_path: Path) -> None:
+    password_file = tmp_path / "password"
+    password_file.write_bytes(b"\xff\xfe\xfa")
+
+    with pytest.raises(ConfigError, match="UTF-8"):
+        DocmostSettings.from_env(
+            env(DOCMOST_PASSWORD="<unset>", DOCMOST_PASSWORD_FILE=str(password_file))
+        )
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf"])
+def test_non_finite_timeouts_are_rejected(raw: str) -> None:
+    with pytest.raises(ConfigError, match="DOCMOST_TIMEOUT_SECONDS"):
+        DocmostSettings.from_env(env(DOCMOST_TIMEOUT_SECONDS=raw))
+
+
+def test_ipv6_hosts_keep_their_brackets() -> None:
+    settings = DocmostSettings.from_env(env(DOCMOST_BASE_URL="https://[::1]:8443/wiki/"))
+
+    assert settings.base_url == "https://[::1]:8443/wiki"

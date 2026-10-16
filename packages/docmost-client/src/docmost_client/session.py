@@ -22,6 +22,13 @@ from docmost_client.settings import DocmostSettings
 Payload = Mapping[str, Any]
 
 
+def _ensure_open(closed: bool) -> None:
+    # Checked under the login lock so a call racing close() cannot open a new
+    # server-side session that would never be logged out.
+    if closed:
+        raise RuntimeError("The Docmost session is closed.")
+
+
 class Session:
     """Blocking session. Safe to share between threads."""
 
@@ -34,6 +41,7 @@ class Session:
         )
         self._token: str | None = None
         self._lock = threading.Lock()
+        self._closed = False
 
     def __repr__(self) -> str:
         return (
@@ -63,6 +71,7 @@ class Session:
     def close(self) -> None:
         """Log out (best effort) and release connections. Idempotent."""
         with self._lock:
+            self._closed = True
             token, self._token = self._token, None
         if token is not None:
             with contextlib.suppress(DocmostError):
@@ -71,12 +80,14 @@ class Session:
 
     def _ensure_token(self) -> str:
         with self._lock:
+            _ensure_open(self._closed)
             if self._token is None:
                 self._token = self._login()
             return self._token
 
     def _relogin(self, stale: str) -> str:
         with self._lock:
+            _ensure_open(self._closed)
             if self._token is None or self._token == stale:
                 self._token = None
                 self._token = self._login()
@@ -107,6 +118,7 @@ class AsyncSession:
         )
         self._token: str | None = None
         self._lock = anyio.Lock()
+        self._closed = False
 
     def __repr__(self) -> str:
         return (
@@ -136,6 +148,7 @@ class AsyncSession:
     async def aclose(self) -> None:
         """Log out (best effort) and release connections. Idempotent."""
         async with self._lock:
+            self._closed = True
             token, self._token = self._token, None
         if token is not None:
             with contextlib.suppress(DocmostError):
@@ -144,12 +157,14 @@ class AsyncSession:
 
     async def _ensure_token(self) -> str:
         async with self._lock:
+            _ensure_open(self._closed)
             if self._token is None:
                 self._token = await self._login()
             return self._token
 
     async def _relogin(self, stale: str) -> str:
         async with self._lock:
+            _ensure_open(self._closed)
             if self._token is None or self._token == stale:
                 self._token = None
                 self._token = await self._login()

@@ -1,0 +1,11 @@
+{
+  "items": [
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000c2", "slugId": "def456uvw1", "title": "Restart procedure",
+      "icon": "🔁", "position": "a0", "parentPageId": "0192b7a4-0000-7000-8000-0000000000c1",
+      "spaceId": "0192b7a4-0000-7000-8000-0000000000b1", "creatorId": "0192b7a4-0000-7000-8000-000000000002",
+      "isBase": false, "deletedAt": null, "hasChildren": true, "canEdit": true
+    }
+  ],
+  "meta": {"limit": 20, "hasNextPage": false, "hasPrevPage": false, "nextCursor": null, "prevCursor": null}
+}

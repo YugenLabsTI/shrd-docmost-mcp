@@ -1,6 +1,8 @@
 """Unofficial typed client for the internal API of self-hosted Docmost Community Edition."""
 
 from docmost_client._version import __version__
+from docmost_client.client import AsyncDocmostClient, DocmostClient
+from docmost_client.compat import SUPPORTED_DOCMOST_VERSIONS
 from docmost_client.errors import (
     AuthenticationError,
     ConfigError,
@@ -9,22 +11,49 @@ from docmost_client.errors import (
     NotFoundError,
     PermissionDeniedError,
     RateLimitedError,
+    UnsupportedVersionError,
     UpstreamError,
+)
+from docmost_client.models import (
+    CONTENT_FORMATS,
+    CompatibilityReport,
+    ContentFormat,
+    CurrentUser,
+    Page,
+    PageSummary,
+    Paginated,
+    SearchHit,
+    Space,
+    SpaceRef,
 )
 from docmost_client.session import AsyncSession, Session
 from docmost_client.settings import DocmostSettings
 
 __all__ = [
+    "CONTENT_FORMATS",
+    "SUPPORTED_DOCMOST_VERSIONS",
+    "AsyncDocmostClient",
     "AsyncSession",
     "AuthenticationError",
+    "CompatibilityReport",
     "ConfigError",
+    "ContentFormat",
+    "CurrentUser",
+    "DocmostClient",
     "DocmostError",
     "DocmostSettings",
     "InvalidRequestError",
     "NotFoundError",
+    "Page",
+    "PageSummary",
+    "Paginated",
     "PermissionDeniedError",
     "RateLimitedError",
+    "SearchHit",
     "Session",
+    "Space",
+    "SpaceRef",
+    "UnsupportedVersionError",
     "UpstreamError",
     "__version__",
 ]

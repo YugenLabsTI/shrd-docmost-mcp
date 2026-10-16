@@ -32,6 +32,7 @@ class DocmostSettings(BaseModel):
     read_only: bool = True
     allowed_spaces: frozenset[str] | None = None
     allow_insecure_http: bool = False
+    allow_untested_version: bool = False
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_content_bytes: int = DEFAULT_MAX_CONTENT_BYTES
 
@@ -48,6 +49,8 @@ class DocmostSettings(BaseModel):
             DOCMOST_ALLOWED_SPACES: comma-separated space slugs or IDs; unset means
                 every space the account can access.
             DOCMOST_ALLOW_INSECURE_HTTP: allow ``http://`` base URLs (local development).
+            DOCMOST_ALLOW_UNTESTED_VERSION: allow Docmost versions this client is not
+                tested against (the internal API may differ).
             DOCMOST_TIMEOUT_SECONDS: per-request timeout, default 30.
             DOCMOST_MAX_CONTENT_BYTES: maximum page content size accepted for writes.
         """
@@ -60,6 +63,7 @@ class DocmostSettings(BaseModel):
             read_only=_bool(env, "DOCMOST_READ_ONLY", default=True),
             allowed_spaces=_allowed_spaces(env),
             allow_insecure_http=allow_insecure_http,
+            allow_untested_version=_bool(env, "DOCMOST_ALLOW_UNTESTED_VERSION", default=False),
             timeout_seconds=_positive_float(
                 env, "DOCMOST_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS
             ),
@@ -78,8 +82,9 @@ def _required(env: Mapping[str, str], name: str) -> str:
 
 def _secret_or_file(env: Mapping[str, str], name: str) -> str:
     file_name = f"{name}_FILE"
-    direct = env.get(name)
-    file_path = env.get(file_name)
+    # Empty values count as unset: compose files often declare VAR="" placeholders.
+    direct = env.get(name) or None
+    file_path = env.get(file_name) or None
     if direct is not None and file_path is not None:
         raise ConfigError(f"Set either {name} or {file_name}, not both.")
     if file_path is not None:
