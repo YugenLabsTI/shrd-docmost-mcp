@@ -82,8 +82,9 @@ def _required(env: Mapping[str, str], name: str) -> str:
 
 def _secret_or_file(env: Mapping[str, str], name: str) -> str:
     file_name = f"{name}_FILE"
-    direct = env.get(name)
-    file_path = env.get(file_name)
+    # Empty values count as unset: compose files often declare VAR="" placeholders.
+    direct = env.get(name) or None
+    file_path = env.get(file_name) or None
     if direct is not None and file_path is not None:
         raise ConfigError(f"Set either {name} or {file_name}, not both.")
     if file_path is not None:

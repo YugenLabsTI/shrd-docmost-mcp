@@ -1,6 +1,9 @@
 """Session behavior shared by the sync and async transports."""
 
+import threading
+import time
 from collections.abc import AsyncIterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 import anyio
@@ -356,3 +359,49 @@ async def test_uses_configured_base_path(api: respx.MockRouter) -> None:
         await session.call("/users/me")
 
     assert me.call_count == 1
+
+
+async def test_calls_after_close_fail_without_logging_in(
+    caller: Caller, api: respx.MockRouter
+) -> None:
+    login = api.post(f"{API}/auth/login").mock(return_value=login_ok())
+
+    await caller.close()
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await caller.call("/users/me")
+    assert login.call_count == 0
+
+
+def test_concurrent_threads_share_a_single_login(api: respx.MockRouter) -> None:
+    def slow_login(request: httpx.Request) -> httpx.Response:
+        time.sleep(0.05)
+        return login_ok()
+
+    login = api.post(f"{API}/auth/login").mock(side_effect=slow_login)
+    api.post(f"{API}/users/me").mock(return_value=wrapped({}))
+
+    with Session(settings()) as session, ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda _: session.call("/users/me"), range(8)))
+
+    assert login.call_count == 1
+
+
+def test_concurrent_401s_with_the_same_stale_token_relogin_once(api: respx.MockRouter) -> None:
+    login = api.post(f"{API}/auth/login").mock(side_effect=[login_ok(), login_ok(TOKEN_2)])
+    barrier = threading.Barrier(4)
+
+    def me(request: httpx.Request) -> httpx.Response:
+        if request.headers["authorization"] == f"Bearer {TOKEN}":
+            barrier.wait(timeout=5)
+            return httpx.Response(401, json={"message": "Unauthorized", "statusCode": 401})
+        return wrapped({})
+
+    api.post(f"{API}/users/me").mock(side_effect=me)
+
+    with Session(settings()) as session:
+        session._ensure_token()  # pyright: ignore[reportPrivateUsage]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(lambda _: session.call("/users/me"), range(4)))
+
+    assert login.call_count == 2
