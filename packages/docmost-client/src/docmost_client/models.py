@@ -109,6 +109,19 @@ class PageSummary(_Model):
     can_edit: bool | None = None
 
 
+class RecentPage(_Model):
+    """A recently updated page (no content), most recent first."""
+
+    id: str
+    slug_id: str
+    title: str | None = None
+    icon: str | None = None
+    parent_page_id: str | None = None
+    space: SpaceRef
+    updated_at: datetime
+    last_updated_by_id: str | None = None
+
+
 class SearchHit(_Model):
     """A full-text search result.
 

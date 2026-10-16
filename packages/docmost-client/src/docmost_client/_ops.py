@@ -33,6 +33,7 @@ from docmost_client.models import (
     Page,
     PageSummary,
     Paginated,
+    RecentPage,
     SearchHit,
     SearchResults,
     Space,
@@ -41,7 +42,7 @@ from docmost_client.policy import SpaceAllowlist
 from docmost_client.settings import DocmostSettings
 
 T = TypeVar("T")
-M = TypeVar("M", Space, PageSummary)
+M = TypeVar("M", Space, PageSummary, RecentPage)
 B = TypeVar("B", bound=BaseModel)
 
 Request = tuple[str, dict[str, Any]]
@@ -174,6 +175,18 @@ def list_children(
     for space_id in {item.space_id for item in page.items}:
         yield from require_space(allowlist, space_id, None)
     return page
+
+
+def list_recent_pages(
+    allowlist: SpaceAllowlist, space: str | None, limit: int, cursor: str | None
+) -> Op[Paginated[RecentPage]]:
+    payload = _pagination(limit, cursor)
+    if space:
+        payload["spaceId"] = yield from resolve_space_id(allowlist, space)
+    data = yield ("/pages/recent", payload)
+    page = _paginated(RecentPage, data)
+    visible = [item for item in page.items if allowlist.allows(item.space.id, item.space.slug)]
+    return page.model_copy(update={"items": visible})
 
 
 def search(

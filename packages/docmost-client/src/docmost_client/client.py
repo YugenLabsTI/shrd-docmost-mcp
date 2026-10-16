@@ -17,6 +17,7 @@ from docmost_client.models import (
     Page,
     PageSummary,
     Paginated,
+    RecentPage,
     SearchResults,
     Space,
 )
@@ -115,6 +116,12 @@ class DocmostClient:
     ) -> Paginated[PageSummary]:
         """List the root pages of ``space`` or the children of ``parent_page_id``."""
         return self._run(_ops.list_children(self._allowlist, space, parent_page_id, limit, cursor))
+
+    def list_recent_pages(
+        self, *, space: str | None = None, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
+    ) -> Paginated[RecentPage]:
+        """List recently updated pages, most recent first, optionally in one space."""
+        return self._run(_ops.list_recent_pages(self._allowlist, space, limit, cursor))
 
     def search(
         self,
@@ -273,6 +280,12 @@ class AsyncDocmostClient:
         return await self._run(
             _ops.list_children(self._allowlist, space, parent_page_id, limit, cursor)
         )
+
+    async def list_recent_pages(
+        self, *, space: str | None = None, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
+    ) -> Paginated[RecentPage]:
+        """List recently updated pages, most recent first, optionally in one space."""
+        return await self._run(_ops.list_recent_pages(self._allowlist, space, limit, cursor))
 
     async def search(
         self,
