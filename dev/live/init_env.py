@@ -9,7 +9,9 @@ the settings the same way the server does and contacts nothing.
 """
 
 import argparse
+import contextlib
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -55,12 +57,13 @@ def main() -> None:
 
 
 def create() -> None:
-    if ENV_FILE.exists():
-        sys.exit(f"{_relative(ENV_FILE)} already exists; edit it or delete it first.")
     PASSWORD_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not PASSWORD_FILE.exists():
-        os.close(os.open(PASSWORD_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
-    _write_private(ENV_FILE, TEMPLATE.format(password_file=PASSWORD_FILE))
+    try:
+        _write_private(ENV_FILE, TEMPLATE.format(password_file=PASSWORD_FILE))
+    except FileExistsError:
+        sys.exit(f"{_relative(ENV_FILE)} already exists; edit it or delete it first.")
+    with contextlib.suppress(FileExistsError):  # keep a password the user already wrote
+        _write_private(PASSWORD_FILE, "")
     print(f"Created {_relative(ENV_FILE)} and the empty password file {PASSWORD_FILE}.")
     print("Fill in both, then run: uv run python dev/live/init_env.py --check")
 
@@ -71,6 +74,11 @@ def check() -> int:
         return 1
     env = _parse(ENV_FILE.read_text())
     problems = [f"{name} is empty" for name in TEST_VARIABLES if not env.get(name)]
+    read_space, sandbox = (env.get(name, "").lower() for name in TEST_VARIABLES)
+    if read_space and read_space == sandbox:
+        problems.append(
+            "DOCMOST_LIVE_READ_SPACE and DOCMOST_LIVE_SANDBOX_SPACE must be different spaces"
+        )
     try:
         settings = DocmostSettings.from_env(env)
     except ConfigError as exc:
@@ -102,12 +110,18 @@ def check() -> int:
 
 
 def _parse(text: str) -> dict[str, str]:
+    """Read KEY=VALUE lines the way a POSIX shell sourcing the file would."""
     env: dict[str, str] = {}
     for line in text.splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            env[key.strip()] = value.strip()
+        try:
+            words = shlex.split(line, comments=True)
+        except ValueError:
+            continue  # unbalanced quotes: the shell would fail too
+        if words and words[0] == "export":
+            words = words[1:]
+        if len(words) == 1 and "=" in words[0]:
+            key, value = words[0].split("=", 1)
+            env[key] = value
     return env
 
 
