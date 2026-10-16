@@ -69,6 +69,9 @@ jobs:
       - name: Install the built wheels in a clean environment and run them
         # Catches packaging gaps the tests cannot see (they run against the sources):
         # missing modules or data files, a broken entry point, unresolvable dependencies.
+        # Dependencies resolve fresh from PyPI on purpose, as a user's install would: the
+        # test jobs already cover the locked versions, this one warns when a new upstream
+        # release breaks installation. The job has no secrets and read-only permissions.
         working-directory: ${{ runner.temp }}
         run: |
           uv venv --python 3.12 wheel-env
