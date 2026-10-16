@@ -233,7 +233,12 @@ def test_reader_role_cannot_comment(commenter: DocmostClient, rich: Page) -> Non
 def test_recent_pages_show_the_latest_update_first(writer: DocmostClient) -> None:
     page = writer.create_page(space="sandbox", title=f"Recent {uuid.uuid4().hex[:8]}", content="x")
 
-    recent = writer.list_recent_pages(space="sandbox", limit=5).items
+    recent = writer.list_recent_pages(space="sandbox", limit=20).items
 
-    assert recent[0].id == page.id
-    assert recent[0].space.slug == "sandbox"
+    # Other writes may land in between: check membership and ordering, not position.
+    mine = next(item for item in recent if item.id == page.id)
+    assert mine.space.slug == "sandbox"
+    assert mine.updated_at == max(item.updated_at for item in recent if item.id == page.id)
+    assert [item.updated_at for item in recent] == sorted(
+        (item.updated_at for item in recent), reverse=True
+    )

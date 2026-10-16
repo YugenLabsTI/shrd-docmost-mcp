@@ -69,7 +69,7 @@ def comment_document(text: str) -> dict[str, Any]:
     notify users) or any other structured node.
     """
     paragraphs: list[dict[str, Any]] = []
-    for line in text.strip().split("\n"):
+    for line in re.split(r"\r\n|\r|\n", text.strip()):
         paragraph: dict[str, Any] = {"type": "paragraph"}
         if line:
             paragraph["content"] = [{"type": "text", "text": line}]
