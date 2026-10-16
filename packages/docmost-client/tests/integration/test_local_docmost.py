@@ -238,7 +238,7 @@ def test_recent_pages_show_the_latest_update_first(writer: DocmostClient) -> Non
     # Other writes may land in between: check membership and ordering, not position.
     mine = next(item for item in recent if item.id == page.id)
     assert mine.space.slug == "sandbox"
-    assert mine.updated_at == max(item.updated_at for item in recent if item.id == page.id)
+    assert mine.updated_at == page.updated_at
     assert [item.updated_at for item in recent] == sorted(
         (item.updated_at for item in recent), reverse=True
     )

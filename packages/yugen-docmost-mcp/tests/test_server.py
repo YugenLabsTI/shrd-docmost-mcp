@@ -681,3 +681,20 @@ async def test_replace_without_content_never_asks(wiki: FakeWiki) -> None:
 
     assert accept.asked == []  # type: ignore[attr-defined]
     assert no_host.structured_content.get("error", {}).get("code") != "CONFIRMATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        mcp_types.ElicitResult(action="accept", content={"confirm": False}),
+        mcp_types.ElicitResult(action="cancel"),
+    ],
+)
+async def test_unconfirmed_replace_fails_closed(wiki: FakeWiki, answer: Any) -> None:
+    async def respond(context: Any, params: Any) -> Any:
+        return answer
+
+    result = await _replace(build_server(wiki, writer=wiki), respond)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "update_page" for name, _ in wiki.calls)
