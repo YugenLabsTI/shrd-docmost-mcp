@@ -29,7 +29,7 @@ Test runner: `uv run pytest` (respx for HTTP mocks); lint `uv run ruff check`, t
 |----|-------|-------|--------|----------|
 | T0 | S5, S15 | delegated (parallel with T1, disjoint surface `docs/docmost-api-v0.96.0.md`) | in progress | |
 | T1 | S1-S3, S11, S16 | inline | done | L8; commit `chore: scaffold uv workspace` |
-| T2 | S6, S7, S8, S10 | inline | pending | |
+| T2 | S6, S7, S8, S10 | inline | done | L9; commit `feat(client): load secure settings from environment` |
 | T3 | S1, S6, S10 | inline | pending | |
 | T4 | S1, S4, S5, S12, S15 | inline | pending | |
 | T5 | S8, S9 | inline | pending | |
@@ -133,3 +133,4 @@ Forecast: ~3000 authored changed lines → exceeds 400; chain strategy to be con
 - **L6 (2026-10-16, user, verbatim):** "No, usa yugen-docmost-mcp"
 - **L7 (2026-10-16, user, verbatim):** "El nombre del repo debe ser shrd-docmost-mcp, pero el paquete en pypi puede ser ese, yugen-docmost-mcp"
 - **L8 (2026-10-16, T1 evidence):** RED: `uv run pytest -q` → 2 failed (AttributeError `__version__`). GREEN: 2 passed (py3.12 and py3.11). `ruff check`, `ruff format --check`, `pyright` strict: clean. `pip-audit --strict --require-hashes` on locked runtime deps: no known vulnerabilities. `uv build --all-packages`: 2 sdists + 2 wheels. Sync API decision: sans-IO request/response helpers shared by thin `httpx.Client` and `httpx.AsyncClient` wrappers (no codegen dependency); decided in T3.
+- **L9 (2026-10-16, T2 evidence):** RED: collection ImportError (`DocmostSettings` missing). GREEN: `uv run pytest -q` → 40 passed; ruff, ruff format, pyright strict clean. Decisions (assumptions, documented in `from_env` docstring): `DOCMOST_ALLOW_INSECURE_HTTP` is the http opt-in flag; `*_FILE` supported for EMAIL and PASSWORD (both set → error); unset `DOCMOST_ALLOWED_SPACES` = all spaces the account can access, set-but-empty fails closed; `DOCMOST_TIMEOUT_SECONDS` default 30; `DOCMOST_MAX_CONTENT_BYTES` default 1,000,000; URL with userinfo/query/fragment rejected. T1 native review: `lens_context_budget_exceeded` (uv.lock size), so an independent general-purpose verifier was used instead.
