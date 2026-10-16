@@ -18,6 +18,7 @@ from docmost_client.models import (
     SearchHit,
     Space,
 )
+from docmost_client.policy import SpaceAllowlist
 from docmost_client.session import AsyncSession, Session
 from docmost_client.settings import DocmostSettings
 
@@ -33,6 +34,7 @@ class DocmostClient:
     def __init__(self, settings: DocmostSettings, *, session: Session | None = None) -> None:
         self._settings = settings
         self._session = Session(settings) if session is None else session
+        self._allowlist = SpaceAllowlist(settings.allowed_spaces)
         self._version: str | None = None
         self._version_loaded = False
 
@@ -91,15 +93,15 @@ class DocmostClient:
         self, *, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None, query: str | None = None
     ) -> Paginated[Space]:
         """List spaces the account is a member of, optionally filtered by name."""
-        return self._run(_ops.list_spaces(limit, cursor, query))
+        return self._run(_ops.list_spaces(self._allowlist, limit, cursor, query))
 
     def get_space(self, space: str) -> Space:
         """Return a space by UUID or slug."""
-        return self._run(_ops.get_space(space))
+        return self._run(_ops.get_space(self._allowlist, space))
 
     def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
-        return self._run(_ops.get_page(page_id, format))
+        return self._run(_ops.get_page(self._allowlist, page_id, format))
 
     def list_children(
         self,
@@ -110,7 +112,7 @@ class DocmostClient:
         cursor: str | None = None,
     ) -> Paginated[PageSummary]:
         """List the root pages of ``space`` or the children of ``parent_page_id``."""
-        return self._run(_ops.list_children(space, parent_page_id, limit, cursor))
+        return self._run(_ops.list_children(self._allowlist, space, parent_page_id, limit, cursor))
 
     def search(
         self,
@@ -122,7 +124,7 @@ class DocmostClient:
         title_only: bool = False,
     ) -> list[SearchHit]:
         """Full-text search over pages the account can read."""
-        return self._run(_ops.search(query, space, limit, offset, title_only))
+        return self._run(_ops.search(self._allowlist, query, space, limit, offset, title_only))
 
     def _run(self, op: _ops.Op[T]) -> T:
         return _ops.drive(op, self._call)
@@ -137,6 +139,7 @@ class AsyncDocmostClient:
     def __init__(self, settings: DocmostSettings, *, session: AsyncSession | None = None) -> None:
         self._settings = settings
         self._session = AsyncSession(settings) if session is None else session
+        self._allowlist = SpaceAllowlist(settings.allowed_spaces)
         self._version: str | None = None
         self._version_loaded = False
 
@@ -188,15 +191,15 @@ class AsyncDocmostClient:
         self, *, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None, query: str | None = None
     ) -> Paginated[Space]:
         """List spaces the account is a member of, optionally filtered by name."""
-        return await self._run(_ops.list_spaces(limit, cursor, query))
+        return await self._run(_ops.list_spaces(self._allowlist, limit, cursor, query))
 
     async def get_space(self, space: str) -> Space:
         """Return a space by UUID or slug."""
-        return await self._run(_ops.get_space(space))
+        return await self._run(_ops.get_space(self._allowlist, space))
 
     async def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
-        return await self._run(_ops.get_page(page_id, format))
+        return await self._run(_ops.get_page(self._allowlist, page_id, format))
 
     async def list_children(
         self,
@@ -207,7 +210,9 @@ class AsyncDocmostClient:
         cursor: str | None = None,
     ) -> Paginated[PageSummary]:
         """List the root pages of ``space`` or the children of ``parent_page_id``."""
-        return await self._run(_ops.list_children(space, parent_page_id, limit, cursor))
+        return await self._run(
+            _ops.list_children(self._allowlist, space, parent_page_id, limit, cursor)
+        )
 
     async def search(
         self,
@@ -219,7 +224,9 @@ class AsyncDocmostClient:
         title_only: bool = False,
     ) -> list[SearchHit]:
         """Full-text search over pages the account can read."""
-        return await self._run(_ops.search(query, space, limit, offset, title_only))
+        return await self._run(
+            _ops.search(self._allowlist, query, space, limit, offset, title_only)
+        )
 
     async def _run(self, op: _ops.Op[T]) -> T:
         return await _ops.drive_async(op, self._call)
