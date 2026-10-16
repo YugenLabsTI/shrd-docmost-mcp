@@ -215,7 +215,14 @@ def create_page(
     check_format(format)
     if content is not None:
         check_content(content, format, settings.max_content_bytes)
-    payload: dict[str, Any] = {"spaceId": (yield from resolve_space_id(allowlist, space))}
+    space_id = yield from resolve_space_id(allowlist, space)
+    payload: dict[str, Any] = {"spaceId": space_id}
+    if parent_page_id is not None:
+        # Docmost checks this too; checking here keeps the allowlist enforced client-side.
+        parent = yield from get_page(allowlist, parent_page_id, "markdown")
+        if parent.space_id != space_id:
+            raise InvalidRequestError("The parent page belongs to a different space.")
+        parent_page_id = parent.id
     if title is not None:
         payload["title"] = title
     if icon is not None:
@@ -254,6 +261,10 @@ def update_page(
         raise InvalidRequestError("Nothing to update: provide content, title, or icon.")
     if content is not None:
         check_content(content, format, settings.max_content_bytes)
+    if expected_updated_at is not None and expected_updated_at.utcoffset() is None:
+        raise InvalidRequestError(
+            "expected_updated_at must include a timezone (use the updated_at returned by get_page)."
+        )
 
     current = yield from get_page(allowlist, page_id, format)
     if current.is_locked:
@@ -280,12 +291,9 @@ def update_page(
     payload["format"] = format
     data = yield ("/pages/update", payload)
     result = _parse(Page, {**_object(data), "format": format})
-    unchanged = result.content == current.content
-    if (
-        content is not None
-        and unchanged
-        and not (operation == "replace" and content == current.content)
-    ):
+    # append/prepend always add blocks, so unchanged content means the write was dropped.
+    # A replace can legitimately store the same content (Docmost normalizes input).
+    if operation in ("append", "prepend") and result.content == current.content:
         raise UpstreamError(
             "Docmost accepted the update but the page content did not change. Content writes "
             "are a silent no-op when the server runs with COLLAB_DISABLE_REDIS=true, or when "

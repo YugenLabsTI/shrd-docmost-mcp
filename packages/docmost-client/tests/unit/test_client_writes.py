@@ -129,6 +129,7 @@ def test_create_page_in_a_space_by_slug(client: DocmostClient, api: respx.MockRo
 
 
 def test_create_page_under_a_parent_with_html(client: DocmostClient, api: respx.MockRouter) -> None:
+    api.post(f"{API}/pages/info").mock(return_value=wrapped(page()))
     route = api.post(f"{API}/pages/create").mock(return_value=wrapped(created()))
 
     client.create_page(
@@ -386,3 +387,94 @@ async def test_async_client_is_read_only_by_default(api: respx.MockRouter) -> No
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+# --- verifier regressions (T6) -------------------------------------------------
+
+
+def test_replace_that_docmost_normalizes_is_not_reported_as_dropped(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    current = page()["content"]
+    api.post(f"{API}/pages/info").mock(return_value=wrapped(page()))
+    api.post(f"{API}/pages/update").mock(
+        return_value=wrapped(page(updatedAt="2026-10-16T10:05:00.000Z"))
+    )
+
+    result = client.update_page(PAGE_ID, content=current + "\n", operation="replace")
+
+    assert result.content == current
+
+
+@pytest.mark.parametrize(
+    ("content", "fmt"),
+    [
+        ('<span data-type="&#109;ention" data-id="u1">@Bob</span>', "html"),
+        ('<span data-type="&#x6D;ention" data-id="u1">@Bob</span>', "html"),
+        ('Hi <span data-type="m&#101;ntion" data-id="u1">@Bob</span>', "markdown"),
+        ("<span DATA-TYPE=MENTION data-id=u1>@Bob</span>", "html"),
+    ],
+)
+def test_entity_encoded_mentions_are_rejected(
+    client: DocmostClient, content: str, fmt: str
+) -> None:
+    with pytest.raises(InvalidRequestError, match="mention"):
+        client.create_page(space=ENG_ID, title="x", content=content, format=fmt)  # type: ignore[arg-type]
+
+
+def test_front_matter_after_a_byte_order_mark_is_rejected(client: DocmostClient) -> None:
+    with pytest.raises(InvalidRequestError, match="front matter"):
+        client.update_page(PAGE_ID, content="﻿---\ntitle: x\n---\nbody", operation="replace")
+
+
+def test_size_limit_counts_the_encoded_request_content(api: respx.MockRouter) -> None:
+    with (
+        DocmostClient(settings(DOCMOST_MAX_CONTENT_BYTES="11")) as client,
+        pytest.raises(InvalidRequestError, match="DOCMOST_MAX_CONTENT_BYTES"),
+    ):
+        client.update_page(PAGE_ID, content='"""""', operation="append")
+
+
+def test_naive_expected_updated_at_is_rejected(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    info = api.post(f"{API}/pages/info")
+
+    with pytest.raises(InvalidRequestError, match="timezone"):
+        client.update_page(PAGE_ID, title="x", expected_updated_at=datetime(2026, 10, 16, 10, 0))
+
+    assert info.call_count == 0
+
+
+def test_unserializable_json_content_is_a_typed_error(client: DocmostClient) -> None:
+    with pytest.raises(InvalidRequestError, match="JSON"):
+        client.update_page(
+            PAGE_ID, content={"type": "doc", "x": {1, 2}}, operation="append", format="json"
+        )
+
+
+def test_create_under_a_parent_from_another_space_is_refused(api: respx.MockRouter) -> None:
+    other = page(spaceId=OPS_ID, space={"id": OPS_ID, "name": "Ops", "slug": "ops"})
+    api.post(f"{API}/pages/info").mock(return_value=wrapped(other))
+    create = api.post(f"{API}/pages/create")
+
+    with (
+        DocmostClient(settings(DOCMOST_ALLOWED_SPACES="engineering")) as client,
+        pytest.raises(SpaceNotAllowedError),
+    ):
+        client.create_page(space="engineering", title="x", parent_page_id=PAGE_ID)
+
+    assert create.call_count == 0
+
+
+def test_create_under_a_parent_in_a_different_allowed_space_is_invalid(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    other = page(spaceId=OPS_ID, space={"id": OPS_ID, "name": "Ops", "slug": "ops"})
+    api.post(f"{API}/pages/info").mock(return_value=wrapped(other))
+    create = api.post(f"{API}/pages/create")
+
+    with pytest.raises(InvalidRequestError, match="parent"):
+        client.create_page(space="engineering", title="x", parent_page_id=PAGE_ID)
+
+    assert create.call_count == 0
