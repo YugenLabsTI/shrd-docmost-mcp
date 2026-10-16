@@ -52,6 +52,8 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_EMAIL` / `DOCMOST_EMAIL_FILE` | required | Login email, or a file containing it. |
 | `DOCMOST_PASSWORD` / `DOCMOST_PASSWORD_FILE` | required | Password, or a file containing it (preferred). |
 | `DOCMOST_READ_ONLY` | `1` | Set to `0` to enable `create_page` and `update_page`. |
+| `DOCMOST_ALLOW_COMMENTS` | `0` | Set to `1` to enable `add_comment`, independently of `DOCMOST_READ_ONLY`. |
+| `DOCMOST_CONFIRM_REPLACE` | `1` | Ask the user to confirm every `replace` (see below). `0` skips the question. |
 | `DOCMOST_ALLOWED_SPACES` | all the account's spaces | Comma-separated space slugs or IDs. Set but empty is an error. |
 | `DOCMOST_ALLOW_INSECURE_HTTP` | `0` | Allow `http://` base URLs (local development only). |
 | `DOCMOST_ALLOW_UNTESTED_VERSION` | `0` | Connect to a Docmost version not in the compatibility matrix. |
@@ -61,6 +63,39 @@ All settings come from environment variables. Nothing is written to disk.
 The account must log in with email and password: accounts that require MFA or SSO are
 not supported.
 
+### What the agent may do
+
+Two independent switches decide which write tools exist. Reading pages and comments is
+always allowed.
+
+| `DOCMOST_READ_ONLY` | `DOCMOST_ALLOW_COMMENTS` | The agent can |
+|---|---|---|
+| `1` (default) | `0` (default) | read pages and comments |
+| `1` | `1` | read, and comment (a reader that comments) |
+| `0` | `0` | read, create and edit pages, but not comment |
+| `0` | `1` | everything above |
+
+Docmost applies its own permissions on top: the account can comment where it can edit the
+page. Letting readers comment ("viewer comments") is an Enterprise feature, so on
+Community Edition an agent that comments needs the `writer` role in those spaces. In that
+setup `DOCMOST_READ_ONLY=1` is what stops it from editing pages: the server does not
+register the page write tools and the client refuses page writes. Keep the writer role
+to the spaces where comments are wanted and list them in `DOCMOST_ALLOWED_SPACES`.
+
+### Confirming a replace
+
+`update_page` with `operation: replace` deletes the whole page body, including recent
+edits by other people. With `DOCMOST_CONFIRM_REPLACE=1` (the default) the server asks the
+user through the MCP host before writing:
+
+- confirmed: the replace goes ahead;
+- declined or cancelled: nothing is written (`CONFIRMATION_DECLINED`);
+- the host cannot ask (no MCP elicitation support): nothing is written
+  (`CONFIRMATION_UNAVAILABLE`). Use `append`/`prepend`, or set `DOCMOST_CONFIRM_REPLACE=0`
+  for that host.
+
+`append`, `prepend` and title changes never ask.
+
 ## MCP tools
 
 | Tool | Mode | Use it to |
@@ -69,6 +104,9 @@ not supported.
 | `list_spaces` | read | Discover the spaces the server can access. |
 | `list_children` | read | Browse a space's page tree. |
 | `get_page` | read | Read a page as `markdown` (default), `html`, or `json`. |
+| `list_recent_pages` | read | See what changed lately, across spaces or in one space. |
+| `list_comments` | read | Read a page's comments (plain text, with resolved state and replies). |
+| `add_comment` | comment | Add a page comment or a reply, in plain text. |
 | `create_page` | write | Create a page, optionally under a parent, with initial content. |
 | `update_page` | write | `append`, `prepend`, or `replace` content and/or rename a page. |
 
@@ -76,7 +114,8 @@ Failures return `is_error: true` with
 `{"error": {"code": "...", "message": "...", "retryable": false}}`. Arguments that do not
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
-`READ_ONLY`, `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
+`READ_ONLY`, `COMMENTS_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
+`SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
 `UNSUPPORTED_VERSION`. Invalid configuration stops the server at startup with a message
 on stderr.
@@ -96,8 +135,11 @@ Details and evidence: [docs/docmost-api-v0.96.0.md](docs/docmost-api-v0.96.0.md#
 Two independent barriers protect the wiki: the Docmost account's own permissions, and
 this server's policy. Details in [SECURITY.md](SECURITY.md).
 
-- Read-only by default. Write tools are not even registered unless enabled, and the
-  client refuses writes on its own as well.
+- Read-only by default. Write and comment tools are not even registered unless enabled,
+  and the client refuses them on its own as well.
+- A `replace` asks the user to confirm before anything is written.
+- Comments are built from plain text by the client, so an agent cannot mention (and
+  notify) users.
 - The space allowlist is enforced inside the client for every read and write.
 - The JWT lives only in memory. It is sent as a bearer header only; cookies are refused
   and redirects are never followed.

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Block 1
+
+- `DOCMOST_ALLOW_COMMENTS` (off by default, independent of `DOCMOST_READ_ONLY`) enables
+  `add_comment`; `list_comments` and `list_recent_pages` are new read tools.
+- Client: `list_comments`, `create_comment`, `list_recent_pages`, models `Comment` and
+  `RecentPage`, error `CommentsDisabledError`.
+- `update_page` asks the user to confirm a `replace` (`DOCMOST_CONFIRM_REPLACE`, on by
+  default); new error codes `CONFIRMATION_DECLINED` and `CONFIRMATION_UNAVAILABLE`.
+
 ### docmost-client 0.1.0
 
 - Settings from `DOCMOST_*` environment variables with secure defaults.

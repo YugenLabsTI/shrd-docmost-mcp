@@ -668,3 +668,33 @@ async def test_append_never_asks(wiki: FakeWiki) -> None:
 
     assert result.is_error is False
     assert accept.asked == []  # type: ignore[attr-defined]
+
+
+async def test_replace_without_content_never_asks(wiki: FakeWiki) -> None:
+    accept.asked.clear()  # type: ignore[attr-defined]
+    title_only = {k: v for k, v in REPLACE.items() if k != "content"} | {"title": "Renamed"}
+
+    async with Client(build_server(wiki, writer=wiki), elicitation_callback=accept) as client:
+        await client.call_tool("update_page", title_only)
+    async with Client(build_server(wiki, writer=wiki)) as client:
+        no_host = await client.call_tool("update_page", title_only)
+
+    assert accept.asked == []  # type: ignore[attr-defined]
+    assert no_host.structured_content.get("error", {}).get("code") != "CONFIRMATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        mcp_types.ElicitResult(action="accept", content={"confirm": False}),
+        mcp_types.ElicitResult(action="cancel"),
+    ],
+)
+async def test_unconfirmed_replace_fails_closed(wiki: FakeWiki, answer: Any) -> None:
+    async def respond(context: Any, params: Any) -> Any:
+        return answer
+
+    result = await _replace(build_server(wiki, writer=wiki), respond)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "update_page" for name, _ in wiki.calls)

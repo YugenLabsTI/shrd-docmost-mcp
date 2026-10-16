@@ -8,6 +8,7 @@ import os
 import uuid
 from typing import Any
 
+import mcp_types
 import pytest
 from mcp import Client
 
@@ -111,3 +112,47 @@ async def test_read_only_server_has_no_write_tools() -> None:
         "list_comments",
     }
     assert result.is_error is False
+
+
+async def test_comments_and_replace_confirmation_over_mcp() -> None:
+    async def accept(context: Any, params: Any) -> Any:
+        return mcp_types.ElicitResult(action="accept", content={"confirm": True})
+
+    async def decline(context: Any, params: Any) -> Any:
+        return mcp_types.ElicitResult(action="decline")
+
+    server_settings = settings(
+        DOCMOST_READ_ONLY="0",
+        DOCMOST_ALLOW_COMMENTS="1",
+        DOCMOST_ALLOWED_SPACES="engineering,sandbox",
+    )
+    title = f"MCP confirm {uuid.uuid4().hex[:8]}"
+    async with Client(create_server(server_settings), elicitation_callback=decline) as client:
+        created = await client.call_tool(
+            "create_page", {"space": "sandbox", "title": title, "content": "Original."}
+        )
+        page_id = created.structured_content["id"]
+        comment = await client.call_tool("add_comment", {"page_id": page_id, "text": "Via MCP."})
+        assert comment.structured_content["text"] == "Via MCP."
+        comments = await client.call_tool("list_comments", {"page_id": page_id})
+        assert [c["text"] for c in comments.structured_content["comments"]] == ["Via MCP."]
+
+        read = await client.call_tool("get_page", {"page_id": page_id})
+        stamp = read.structured_content["updated_at"]
+        replace = {
+            "page_id": page_id,
+            "expected_updated_at": stamp,
+            "content": "Replaced.",
+            "operation": "replace",
+        }
+        declined = await client.call_tool("update_page", replace)
+        assert declined.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+        unchanged = await client.call_tool("get_page", {"page_id": page_id})
+        assert "Original." in unchanged.structured_content["content"]
+        assert unchanged.structured_content["updated_at"] == stamp
+
+    async with Client(create_server(server_settings), elicitation_callback=accept) as client:
+        replaced = await client.call_tool("update_page", replace)
+        assert replaced.is_error is False
+        assert "Replaced." in replaced.structured_content["content"]
+        assert "Original." not in replaced.structured_content["content"]

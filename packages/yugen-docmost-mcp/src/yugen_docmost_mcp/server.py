@@ -363,7 +363,8 @@ def _register_read_tools(
             "List pages by most recent update, across the accessible spaces or in one space. "
             "Use it to answer 'what changed lately?' or to find a page someone just edited. "
             "Returns id, title, space, parent_page_id and updated_at (no content). Page "
-            "with next_cursor. "
+            "with next_cursor; a page can come back short or empty when recent changes are "
+            "in spaces this server cannot access, so keep paging while next_cursor is set. "
             + _ERRORS
             + "SPACE_NOT_ALLOWED, FORBIDDEN, NOT_FOUND, INVALID_INPUT, AUTH_FAILED, "
             "RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
@@ -394,6 +395,9 @@ class ReplaceConfirmation(BaseModel):
     confirm: bool = Field(description="Replace the whole page content")
 
 
+Need = Literal["not_needed", "unavailable", "ask"]
+
+
 class ConfirmationGate(BaseModel):
     status: Literal["not_needed", "unavailable", "accepted", "declined"]
 
@@ -412,15 +416,19 @@ def _confirmation_resolvers(
     so the tool always reports a typed result instead of an aborted call.
     """
 
-    def need(operation: str | None, ctx: Context) -> str:
-        if not confirm_replace or operation != "replace":
+    def need(operation: str | None, content: str, ctx: Context) -> Need:
+        # Without content there is nothing to replace: the client rejects the call anyway.
+        if not confirm_replace or operation != "replace" or not content:
             return "not_needed"
         return "ask" if ctx.session.check_client_capability(_ELICITATION) else "unavailable"
 
     def ask(
-        page_id: str, operation: str | None, ctx: Context
+        page_id: str, operation: str | None, content: str, ctx: Context
     ) -> Elicit[ReplaceConfirmation] | AcceptedElicitation[ReplaceConfirmation]:
-        if need(operation, ctx) != "ask":
+        if need(operation, content, ctx) != "ask":
+            # Placeholder only: no question was asked. `decide` recomputes `need` and
+            # ignores this value unless the status is "ask", so it never counts as a
+            # user confirmation.
             return AcceptedElicitation(data=ReplaceConfirmation(confirm=True))
         return Elicit(
             f"Replace the entire content of Docmost page {page_id}? Everything currently on "
@@ -430,12 +438,13 @@ def _confirmation_resolvers(
 
     def decide(
         operation: str | None,
+        content: str,
         ctx: Context,
         answer: Annotated[ElicitationResult[ReplaceConfirmation], Resolve(ask)],
     ) -> ConfirmationGate:
-        status = need(operation, ctx)
+        status = need(operation, content, ctx)
         if status != "ask":
-            return ConfirmationGate(status=cast(Any, status))
+            return ConfirmationGate(status=status)
         confirmed = isinstance(answer, AcceptedElicitation) and answer.data.confirm
         return ConfirmationGate(status="accepted" if confirmed else "declined")
 
@@ -467,8 +476,8 @@ def _register_comment_tool(
             "it to propose a change or ask a question instead of editing the page. The page "
             "watchers are notified. Returns the stored comment. "
             + _ERRORS
-            + "COMMENTS_DISABLED, FORBIDDEN (the account needs edit access or the space must "
-            "allow viewer comments), NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, "
+            + "COMMENTS_DISABLED, FORBIDDEN (the account needs edit access to the page), "
+            "NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, "
             "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
         ),
         annotations=_COMMENT,

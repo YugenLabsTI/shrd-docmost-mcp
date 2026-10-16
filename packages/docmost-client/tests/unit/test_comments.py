@@ -220,7 +220,7 @@ def test_permission_errors_explain_viewer_comments(
         return_value=httpx.Response(403, json={"message": "Forbidden", "statusCode": 403})
     )
 
-    with pytest.raises(PermissionDeniedError, match="viewer comments"):
+    with pytest.raises(PermissionDeniedError, match="edit access"):
         commenter.create_comment(PAGE_ID, "hello")
 
 
@@ -260,3 +260,14 @@ async def test_async_client_reads_and_adds_comments(api: respx.MockRouter) -> No
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+def test_windows_line_endings_become_clean_paragraphs(
+    commenter: DocmostClient, api: respx.MockRouter
+) -> None:
+    route = api.post(f"{API}/comments/create").mock(return_value=wrapped(fixture("comment_create")))
+
+    commenter.create_comment(PAGE_ID, "first\r\nsecond\rthird")
+
+    paragraphs = json.loads(body(route)["content"])["content"]
+    assert [p["content"][0]["text"] for p in paragraphs] == ["first", "second", "third"]
