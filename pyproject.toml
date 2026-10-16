@@ -42,6 +42,8 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "packages/*/tests/**" = ["S101", "S105", "S106"]
+# Local developer scripts: CLI output and long literal fixtures are expected.
+"dev/**" = ["T201", "S101", "E501"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
