@@ -25,7 +25,6 @@ from docmost_client import (
     DocmostClient,
     DocmostError,
     DocmostSettings,
-    PermissionDeniedError,
     ReadOnlyError,
     StalePageError,
 )
@@ -60,6 +59,8 @@ def main() -> None:
     with DocmostClient(settings) as client:
         read_checks(client, read_space, sandbox)
     asyncio.run(mcp_checks(settings, read_space))
+    if args.write and failures:
+        sys.exit("\nRead checks failed; not running --write.")
     if args.write:
         writable = settings.model_copy(update={"read_only": False})
         with DocmostClient(writable) as client:
@@ -86,8 +87,9 @@ def read_checks(client: DocmostClient, read_space: str, sandbox: str) -> None:
         read_role = client.get_space(read_space).role
         sandbox_role = client.get_space(sandbox).role
         assert sandbox_role in {"writer", "admin"}, f"sandbox role is {sandbox_role}, not writer"
-        note = "" if read_role == "reader" else " (expected reader: the account can edit it)"
-        return f"read space={read_role}{note}, sandbox={sandbox_role}"
+        # A writer role would let --write tests reach real pages: refuse to go on.
+        assert read_role == "reader", f"read space role is {read_role}; it must be reader"
+        return f"read space={read_role}, sandbox={sandbox_role}"
 
     step("compatibility", compatibility)
     step("account", lambda: f"role {client.me().role}")
@@ -152,14 +154,13 @@ async def mcp_checks(settings: DocmostSettings, read_space: str) -> None:
 
 def write_checks(client: DocmostClient, read_space: str, sandbox: str) -> None:
     def role_barrier() -> str:
-        page = client.list_children(space=read_space).items
-        if not page:
+        # Read-only check: never send an update outside the sandbox.
+        pages = client.list_children(space=read_space).items
+        if not pages:
             return "skipped (no page in the read space)"
-        try:
-            client.update_page(page[0].id, content="never", operation="append")
-        except PermissionDeniedError:
-            return "update refused before sending (account cannot edit)"
-        raise AssertionError("an update to the read space was accepted")
+        page = client.get_page(pages[0].id)
+        assert page.can_edit is False, "the account can edit the read space"
+        return "account cannot edit the read space (checked without writing)"
 
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     created: dict[str, str] = {}
