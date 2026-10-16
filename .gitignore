@@ -13,7 +13,10 @@ htmlcov/
 # Secrets: never commit credentials or local env files
 .env
 .env.*
+!.env.example
 *.secret
+*.pem
+*.key
 
 # Local tooling
 .atl/
