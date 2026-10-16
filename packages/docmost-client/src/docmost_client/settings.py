@@ -30,6 +30,7 @@ class DocmostSettings(BaseModel):
     email: str
     password: SecretStr
     read_only: bool = True
+    allow_comments: bool = False
     allowed_spaces: frozenset[str] | None = None
     allow_insecure_http: bool = False
     allow_untested_version: bool = False
@@ -45,7 +46,9 @@ class DocmostSettings(BaseModel):
                 DOCMOST_ALLOW_INSECURE_HTTP is true.
             DOCMOST_EMAIL / DOCMOST_EMAIL_FILE: login email, or a file containing it.
             DOCMOST_PASSWORD / DOCMOST_PASSWORD_FILE: password, or a file containing it.
-            DOCMOST_READ_ONLY: defaults to true; set to false to allow writes.
+            DOCMOST_READ_ONLY: defaults to true; set to false to allow page writes.
+            DOCMOST_ALLOW_COMMENTS: defaults to false; set to true to allow adding
+                comments, independently of DOCMOST_READ_ONLY.
             DOCMOST_ALLOWED_SPACES: comma-separated space slugs or IDs; unset means
                 every space the account can access.
             DOCMOST_ALLOW_INSECURE_HTTP: allow ``http://`` base URLs (local development).
@@ -55,15 +58,16 @@ class DocmostSettings(BaseModel):
             DOCMOST_MAX_CONTENT_BYTES: maximum page content size accepted for writes.
         """
         env = os.environ if environ is None else environ
-        allow_insecure_http = _bool(env, "DOCMOST_ALLOW_INSECURE_HTTP", default=False)
+        allow_insecure_http = env_flag(env, "DOCMOST_ALLOW_INSECURE_HTTP", default=False)
         return cls(
             base_url=_base_url(_required(env, "DOCMOST_BASE_URL"), allow_insecure_http),
             email=_secret_or_file(env, "DOCMOST_EMAIL"),
             password=SecretStr(_secret_or_file(env, "DOCMOST_PASSWORD")),
-            read_only=_bool(env, "DOCMOST_READ_ONLY", default=True),
+            read_only=env_flag(env, "DOCMOST_READ_ONLY", default=True),
+            allow_comments=env_flag(env, "DOCMOST_ALLOW_COMMENTS", default=False),
             allowed_spaces=_allowed_spaces(env),
             allow_insecure_http=allow_insecure_http,
-            allow_untested_version=_bool(env, "DOCMOST_ALLOW_UNTESTED_VERSION", default=False),
+            allow_untested_version=env_flag(env, "DOCMOST_ALLOW_UNTESTED_VERSION", default=False),
             timeout_seconds=_positive_float(
                 env, "DOCMOST_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS
             ),
@@ -139,7 +143,8 @@ def _base_url(raw: str, allow_insecure_http: bool) -> str:
     return urlunsplit((scheme, netloc, parts.path.rstrip("/"), "", ""))
 
 
-def _bool(env: Mapping[str, str], name: str, *, default: bool) -> bool:
+def env_flag(env: Mapping[str, str], name: str, *, default: bool) -> bool:
+    """Parse a boolean variable (1/0, true/false, yes/no, on/off); empty means ``default``."""
     raw = env.get(name)
     if raw is None or not raw.strip():
         return default

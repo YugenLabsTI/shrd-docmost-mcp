@@ -19,7 +19,17 @@ from docmost_client import (
     PermissionDeniedError,
     RateLimitedError,
 )
-from docmost_client._ops import drive, get_page, get_space, list_children, list_spaces, me, search
+from docmost_client._ops import (
+    drive,
+    get_page,
+    get_space,
+    list_children,
+    list_comments,
+    list_recent_pages,
+    list_spaces,
+    me,
+    search,
+)
 from docmost_client._protocol import token_from_login, unwrap
 from docmost_client.errors import AuthenticationError, DocmostError
 from docmost_client.models import ContentFormat
@@ -180,6 +190,9 @@ def _empty_list_paths(value: Any, prefix: str = "") -> set[str]:
         "page_info_markdown",
         "sidebar_pages",
         "search",
+        "recent_pages",
+        "comments_list",
+        "comment_create",
     ],
 )
 def test_synthesized_fixtures_only_use_real_fields(name: str) -> None:
@@ -192,3 +205,25 @@ def test_synthesized_fixtures_only_use_real_fields(name: str) -> None:
     }
 
     assert unseen == set()
+
+
+def test_recent_pages_parse() -> None:
+    result = drive(
+        list_recent_pages(OPEN, None, 5, None),
+        replay({"/pages/recent": recorded("recent_pages")}),
+    )
+
+    assert result.items
+    assert all(page.space.slug == "sandbox" for page in result.items)
+
+
+def test_comments_parse_as_plain_text() -> None:
+    created = recorded("comment_create")
+    page = recorded("page_info_markdown") | {"id": created["pageId"]}
+    result = drive(
+        list_comments(OPEN, created["pageId"], 20, None),
+        replay({"/pages/info": page, "/comments": recorded("comments_list")}),
+    )
+
+    assert [comment.text for comment in result.items] == ["Recorded comment."]
+    assert result.items[0].creator_name == "Agent"

@@ -4,10 +4,11 @@ Models ignore unknown fields so additive server changes do not break parsing, an
 snake_case attributes. Field provenance is documented in docs/docmost-api-v0.96.0.md.
 """
 
+import json
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from pydantic import AliasPath, BaseModel, ConfigDict, Field
+from pydantic import AliasPath, BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 ContentFormat = Literal["markdown", "html", "json"]
@@ -109,6 +110,19 @@ class PageSummary(_Model):
     can_edit: bool | None = None
 
 
+class RecentPage(_Model):
+    """A recently updated page (no content), most recent first."""
+
+    id: str
+    slug_id: str
+    title: str | None = None
+    icon: str | None = None
+    parent_page_id: str | None = None
+    space: SpaceRef
+    updated_at: datetime
+    last_updated_by_id: str | None = None
+
+
 class SearchHit(_Model):
     """A full-text search result.
 
@@ -139,6 +153,39 @@ class SearchResults(BaseModel):
 
     hits: list[SearchHit]
     next_offset: int | None = None
+
+
+def _comment_text(content: object) -> str:
+    from docmost_client._content import document_text
+
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except ValueError:
+            return content
+    return document_text(content)
+
+
+class Comment(_Model):
+    """A page comment; ``text`` is its plain-text rendering (mentions as @label)."""
+
+    id: str
+    page_id: str
+    space_id: str
+    parent_comment_id: str | None = None
+    type: str | None = None
+    selection: str | None = Field(
+        default=None, description="Page text an inline comment is anchored to."
+    )
+    text: Annotated[str, BeforeValidator(_comment_text)] = Field(
+        default="", validation_alias="content"
+    )
+    creator_id: str | None = None
+    creator_name: str | None = Field(default=None, validation_alias=AliasPath("creator", "name"))
+    created_at: datetime
+    edited_at: datetime | None = None
+    resolved_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class Paginated(BaseModel, Generic[T]):

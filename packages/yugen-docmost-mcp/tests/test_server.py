@@ -4,16 +4,19 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+import mcp_types
 import pytest
 from mcp import Client
 
 from docmost_client import (
+    Comment,
     CompatibilityReport,
     ContentFormat,
     ContentOperation,
     Page,
     PageSummary,
     Paginated,
+    RecentPage,
     SearchHit,
     SearchResults,
     Space,
@@ -28,7 +31,14 @@ pytestmark = pytest.mark.anyio
 
 ENG = SpaceRef(id="s1", name="Engineering", slug="engineering")
 UPDATED_AT = datetime(2026, 10, 16, 10, 0, tzinfo=UTC)
-READ_TOOLS = {"search", "list_spaces", "get_page", "list_children"}
+READ_TOOLS = {
+    "search",
+    "list_spaces",
+    "get_page",
+    "list_children",
+    "list_recent_pages",
+    "list_comments",
+}
 WRITE_TOOLS = {"create_page", "update_page"}
 
 
@@ -130,6 +140,47 @@ class FakeWiki:
             icon=icon,
         )
         return make_page(format, None)
+
+    async def list_recent_pages(
+        self, *, space: str | None, limit: int, cursor: str | None
+    ) -> Paginated[RecentPage]:
+        self._record("list_recent_pages", space=space, limit=limit, cursor=cursor)
+        page = RecentPage(
+            id="p1", slug_id="abc123xyz0", title="Runbook", space=ENG, updated_at=UPDATED_AT
+        )
+        return Paginated[RecentPage](items=[page], has_next_page=True, next_cursor="r2")
+
+    async def list_comments(
+        self, page_id: str, *, limit: int, cursor: str | None
+    ) -> Paginated[Comment]:
+        self._record("list_comments", page_id=page_id, limit=limit, cursor=cursor)
+        comment = Comment(
+            id="c1",
+            page_id="p1",
+            space_id="s1",
+            type="page",
+            text="Should we drain first?",
+            creator_name="Ana",
+            created_at=UPDATED_AT,
+        )
+        return Paginated[Comment](items=[comment], has_next_page=False, next_cursor=None)
+
+    async def create_comment(
+        self, page_id: str, text: str, *, parent_comment_id: str | None
+    ) -> Comment:
+        self._record(
+            "create_comment", page_id=page_id, text=text, parent_comment_id=parent_comment_id
+        )
+        return Comment(
+            id="c9",
+            page_id="p1",
+            space_id="s1",
+            parent_comment_id=parent_comment_id,
+            type="page",
+            text=text,
+            creator_name="Wiki Bot",
+            created_at=UPDATED_AT,
+        )
 
     async def update_page(
         self,
@@ -390,7 +441,7 @@ async def test_update_page_requires_the_updated_at_the_agent_read(wiki: FakeWiki
 
 async def test_update_page_parses_timestamps_and_json_content(wiki: FakeWiki) -> None:
     result = await call(
-        build_server(wiki, writer=wiki),
+        build_server(wiki, writer=wiki, confirm_replace=False),
         "update_page",
         page_id="p1",
         expected_updated_at="2026-10-16T05:00:00-05:00",
@@ -409,7 +460,7 @@ async def test_update_page_parses_timestamps_and_json_content(wiki: FakeWiki) ->
 
 async def test_update_page_rejects_malformed_json_content(wiki: FakeWiki) -> None:
     result = await call(
-        build_server(wiki, writer=wiki),
+        build_server(wiki, writer=wiki, confirm_replace=False),
         "update_page",
         page_id="p1",
         expected_updated_at="2026-10-16T10:00:00Z",
@@ -478,3 +529,172 @@ async def test_explicit_nulls_for_optional_arguments_mean_not_given(wiki: FakeWi
     assert calls["list_children"]["parent_page_id"] is None
     assert calls["search"]["space"] is None
     assert calls["update_page"]["content"] is None
+
+
+# --- block 1: recent pages, comments, replace confirmation --------------------
+
+
+async def test_list_recent_pages(wiki: FakeWiki) -> None:
+    result = await call(build_server(wiki, writer=None), "list_recent_pages", space="", limit=5)
+
+    assert result.structured_content == {
+        "pages": [
+            {
+                "id": "p1",
+                "slug_id": "abc123xyz0",
+                "title": "Runbook",
+                "parent_page_id": None,
+                "space": {"id": "s1", "slug": "engineering", "name": "Engineering"},
+                "updated_at": "2026-10-16T10:00:00Z",
+            }
+        ],
+        "next_cursor": "r2",
+    }
+    assert ("list_recent_pages", {"space": None, "limit": 5, "cursor": None}) in wiki.calls
+
+
+async def test_list_comments(wiki: FakeWiki) -> None:
+    result = await call(build_server(wiki, writer=None), "list_comments", page_id="p1")
+
+    assert result.structured_content == {
+        "comments": [
+            {
+                "id": "c1",
+                "parent_comment_id": None,
+                "type": "page",
+                "selection": None,
+                "text": "Should we drain first?",
+                "author": "Ana",
+                "created_at": "2026-10-16T10:00:00Z",
+                "resolved": False,
+            }
+        ],
+        "next_cursor": None,
+    }
+
+
+async def test_add_comment_exists_only_when_comments_are_allowed(wiki: FakeWiki) -> None:
+    async with Client(build_server(wiki, writer=None)) as client:
+        plain = {tool.name for tool in (await client.list_tools()).tools}
+    async with Client(build_server(wiki, writer=None, commenter=wiki)) as client:
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+
+    assert "add_comment" not in plain
+    assert set(tools) == READ_TOOLS | {"add_comment"}
+    annotations = tools["add_comment"].annotations
+    assert annotations is not None
+    assert annotations.read_only_hint is False
+    assert annotations.destructive_hint is False
+
+
+async def test_add_comment_passes_plain_text(wiki: FakeWiki) -> None:
+    server = build_server(wiki, writer=None, commenter=wiki)
+
+    top = await call(server, "add_comment", page_id="p1", text="Looks good.")
+    reply = await call(server, "add_comment", page_id="p1", text="+1", parent_comment_id="c1")
+
+    assert top.structured_content["text"] == "Looks good."
+    assert (
+        "create_comment",
+        {"page_id": "p1", "text": "Looks good.", "parent_comment_id": None},
+    ) in wiki.calls
+    assert reply.structured_content["parent_comment_id"] == "c1"
+
+
+REPLACE = {
+    "page_id": "p1",
+    "expected_updated_at": "2026-10-16T10:00:00Z",
+    "content": "New body",
+    "operation": "replace",
+}
+
+
+async def _replace(server: Any, callback: Any) -> Any:
+    async with Client(server, elicitation_callback=callback) as client:
+        return await client.call_tool("update_page", REPLACE)
+
+
+async def accept(context: Any, params: Any) -> Any:
+    accept.asked.append(params.message)  # type: ignore[attr-defined]
+    return mcp_types.ElicitResult(action="accept", content={"confirm": True})
+
+
+accept.asked = []  # type: ignore[attr-defined]
+
+
+async def decline(context: Any, params: Any) -> Any:
+    return mcp_types.ElicitResult(action="decline")
+
+
+async def test_replace_asks_the_user_and_proceeds_when_confirmed(wiki: FakeWiki) -> None:
+    accept.asked.clear()  # type: ignore[attr-defined]
+
+    result = await _replace(build_server(wiki, writer=wiki), accept)
+
+    assert result.is_error is False
+    assert any(name == "update_page" for name, _ in wiki.calls)
+    assert len(accept.asked) == 1  # type: ignore[attr-defined]
+    assert "p1" in accept.asked[0]  # type: ignore[attr-defined]
+
+
+async def test_declined_replace_writes_nothing(wiki: FakeWiki) -> None:
+    result = await _replace(build_server(wiki, writer=wiki), decline)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "update_page" for name, _ in wiki.calls)
+
+
+async def test_replace_is_blocked_when_the_host_cannot_ask(wiki: FakeWiki) -> None:
+    result = await _replace(build_server(wiki, writer=wiki), None)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_UNAVAILABLE"
+    assert "DOCMOST_CONFIRM_REPLACE" in result.structured_content["error"]["message"]
+    assert not any(name == "update_page" for name, _ in wiki.calls)
+
+
+async def test_replace_without_confirmation_when_disabled(wiki: FakeWiki) -> None:
+    accept.asked.clear()  # type: ignore[attr-defined]
+
+    result = await _replace(build_server(wiki, writer=wiki, confirm_replace=False), accept)
+
+    assert result.is_error is False
+    assert accept.asked == []  # type: ignore[attr-defined]
+
+
+async def test_append_never_asks(wiki: FakeWiki) -> None:
+    accept.asked.clear()  # type: ignore[attr-defined]
+    async with Client(build_server(wiki, writer=wiki), elicitation_callback=accept) as client:
+        result = await client.call_tool("update_page", REPLACE | {"operation": "append"})
+
+    assert result.is_error is False
+    assert accept.asked == []  # type: ignore[attr-defined]
+
+
+async def test_replace_without_content_never_asks(wiki: FakeWiki) -> None:
+    accept.asked.clear()  # type: ignore[attr-defined]
+    title_only = {k: v for k, v in REPLACE.items() if k != "content"} | {"title": "Renamed"}
+
+    async with Client(build_server(wiki, writer=wiki), elicitation_callback=accept) as client:
+        await client.call_tool("update_page", title_only)
+    async with Client(build_server(wiki, writer=wiki)) as client:
+        no_host = await client.call_tool("update_page", title_only)
+
+    assert accept.asked == []  # type: ignore[attr-defined]
+    assert no_host.structured_content.get("error", {}).get("code") != "CONFIRMATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        mcp_types.ElicitResult(action="accept", content={"confirm": False}),
+        mcp_types.ElicitResult(action="cancel"),
+    ],
+)
+async def test_unconfirmed_replace_fails_closed(wiki: FakeWiki, answer: Any) -> None:
+    async def respond(context: Any, params: Any) -> Any:
+        return answer
+
+    result = await _replace(build_server(wiki, writer=wiki), respond)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "update_page" for name, _ in wiki.calls)

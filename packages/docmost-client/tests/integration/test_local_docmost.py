@@ -200,3 +200,45 @@ def test_precheck_tolerates_equal_instants_in_other_offsets(writer: DocmostClien
 def test_front_matter_guard_runs_before_any_request(writer: DocmostClient) -> None:
     with pytest.raises(InvalidRequestError, match="front matter"):
         writer.create_page(space="sandbox", title="Never", content="---\nIntro\n---\nBody")
+
+
+# --- block 1: comments and recent pages ----------------------------------------
+
+
+@pytest.fixture(scope="module")
+def commenter() -> Iterator[DocmostClient]:
+    # Read-only + comments: on Community Edition the account needs the writer role to
+    # comment (sandbox), so the server's read-only mode is what blocks page edits.
+    with DocmostClient(_settings(DOCMOST_ALLOW_COMMENTS="1")) as client:
+        yield client
+
+
+def test_comment_only_mode_comments_but_never_edits(commenter: DocmostClient) -> None:
+    page = next(iter(commenter.list_children(space="sandbox").items))
+
+    comment = commenter.create_comment(page.id, "Integration comment.\nSecond line.")
+    listed = commenter.list_comments(page.id).items
+
+    assert comment.text == "Integration comment.\nSecond line."
+    assert any(item.id == comment.id and item.text == comment.text for item in listed)
+    with pytest.raises(ReadOnlyError):
+        commenter.update_page(page.id, content="never", operation="append")
+
+
+def test_reader_role_cannot_comment(commenter: DocmostClient, rich: Page) -> None:
+    with pytest.raises(PermissionDeniedError, match="edit access"):
+        commenter.create_comment(rich.id, "never")
+
+
+def test_recent_pages_show_the_latest_update_first(writer: DocmostClient) -> None:
+    page = writer.create_page(space="sandbox", title=f"Recent {uuid.uuid4().hex[:8]}", content="x")
+
+    recent = writer.list_recent_pages(space="sandbox", limit=20).items
+
+    # Other writes may land in between: check membership and ordering, not position.
+    mine = next(item for item in recent if item.id == page.id)
+    assert mine.space.slug == "sandbox"
+    assert mine.updated_at == page.updated_at
+    assert [item.updated_at for item in recent] == sorted(
+        (item.updated_at for item in recent), reverse=True
+    )
