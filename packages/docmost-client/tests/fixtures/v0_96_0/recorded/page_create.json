@@ -1,23 +1,23 @@
 {
   "contributorIds": [],
   "coverPhoto": null,
-  "createdAt": "2026-10-16T17:31:26.689Z",
-  "creatorId": "01a145c3-975b-7779-a453-68c6e3047774",
+  "createdAt": "2026-10-16T23:10:42.536Z",
+  "creatorId": "01a146e5-ab6c-7db2-aafe-be56a721b1c0",
   "deletedAt": null,
   "icon": null,
-  "id": "01a145c4-c861-78ee-8d56-62043b8787b6",
+  "id": "01a146fb-6369-709c-808d-bd88e2999401",
   "isBase": false,
   "isLocked": false,
-  "lastUpdatedById": "01a145c3-975b-7779-a453-68c6e3047774",
+  "lastUpdatedById": "01a146e5-ab6c-7db2-aafe-be56a721b1c0",
   "parentPageId": null,
   "permissions": {
     "canEdit": true,
     "hasRestriction": false
   },
-  "position": "a16Bm",
-  "slugId": "9IHgS8lVry",
-  "spaceId": "01a145c3-955d-76ee-aa03-18f289a1bc75",
+  "position": "a89DE",
+  "slugId": "MPBSZ8DzGF",
+  "spaceId": "01a146e5-a91d-7edd-aaff-cee3aab0da91",
   "title": "Recorded",
-  "updatedAt": "2026-10-16T17:31:26.689Z",
-  "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+  "updatedAt": "2026-10-16T23:10:42.536Z",
+  "workspaceId": "01a146e5-a77c-7a8b-829c-0855e2583045"
 }

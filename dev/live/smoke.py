@@ -138,7 +138,14 @@ async def mcp_checks(settings: DocmostSettings, read_space: str) -> None:
 
     async with Client(create_server(settings)) as client:
         names = {tool.name for tool in (await client.list_tools()).tools}
-        expected = {"search", "list_spaces", "get_page", "list_children"}
+        expected = {
+            "search",
+            "list_spaces",
+            "get_page",
+            "list_children",
+            "list_recent_pages",
+            "list_comments",
+        }
         ok = names == expected
         print(f"{'ok   ' if ok else 'FAIL '} mcp tools: {sorted(names)}")
         if not ok:

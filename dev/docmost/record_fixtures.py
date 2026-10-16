@@ -80,6 +80,21 @@ def main() -> None:
                 },
             ),
         )
+        doc = {
+            "type": "doc",
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Recorded comment."}]}
+            ],
+        }
+        _save(
+            "comment_create",
+            session.call(
+                "/comments/create",
+                {"pageId": created["id"], "content": json.dumps(doc), "type": "page"},
+            ),
+        )
+        _save("comments_list", session.call("/comments", {"pageId": created["id"], "limit": 20}))
+        _save("recent_pages", session.call("/pages/recent", {"spaceId": sandbox.id, "limit": 5}))
 
     _record_errors(settings, runbook.id, sandbox.id)
     print(f"Recorded fixtures into {OUT.relative_to(ROOT)}")
