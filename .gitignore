@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: never commit credentials or local env files
+.env
+.env.*
+*.secret
+
+# Local tooling
+.atl/
+.codegraph/
+.DS_Store
