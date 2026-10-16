@@ -1,0 +1,11 @@
+{
+  "id": "0192b7a4-0000-7000-8000-0000000000e9", "pageId": "0192b7a4-0000-7000-8000-0000000000c1",
+  "parentCommentId": null, "type": "page", "selection": null,
+  "content": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Looks good."}]}]},
+  "creatorId": "0192b7a4-0000-7000-8000-000000000001", "spaceId": "0192b7a4-0000-7000-8000-0000000000b1",
+  "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "lastEditedById": null, "resolvedById": null,
+  "createdAt": "2026-10-16T12:30:00.000Z", "updatedAt": "2026-10-16T12:30:00.000Z", "editedAt": null,
+  "resolvedAt": null, "deletedAt": null,
+  "creator": {"id": "0192b7a4-0000-7000-8000-000000000001", "name": "Wiki Bot", "avatarUrl": null},
+  "resolvedBy": null
+}

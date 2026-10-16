@@ -19,7 +19,7 @@ Assumptions (agent decisions, documented): comments are created as page-level (`
 |----|-------|-------|--------|----------|
 | T1 | S1, S3, S5 | inline | done | L5; commit `feat: add comment and replace-confirmation settings` |
 | T2 | S3, S5 | inline | done | L6; commit `feat(client): list recent pages` |
-| T3 | S1, S3, S5 | inline | pending | |
+| T3 | S1, S3, S5 | inline | done (verifier pending, with T4) | L7; commit `feat(client): read and add page comments` |
 | T4 | S1, S3, S5 | inline | pending | |
 | T5 | S1, S2 | inline | pending | |
 | T6 | S1, S3, S5 | inline | pending | |
@@ -36,3 +36,4 @@ High-risk: T3 (writes, permissions), T4 (permission gating, confirmation). Forec
 - **L4 (2026-10-16, evidence):** mcp 2.3 elicitation probe: `Resolve(fn)` + `Elicit(message, schema)` works on both the 2026-07-28 protocol (input_required rounds) and legacy; accept/decline both delivered; without client elicitation support the call fails with a protocol error, detectable beforehand via `ctx.session.check_client_capability(ClientCapabilities(elicitation=...))`. Direct `ctx.elicit` has no back-channel on the modern protocol.
 - **L5 (2026-10-16, T1 evidence):** RED: collection ImportError (`confirm_replace_from_env`). GREEN: 252 passed. `DocmostSettings.allow_comments` (DOCMOST_ALLOW_COMMENTS, default false, independent of read-only); the client's boolean parser is now public as `docmost_client.settings.env_flag`; `confirm_replace_from_env` (DOCMOST_CONFIRM_REPLACE, default true) lives in the MCP package because confirmation is an MCP-host concern.
 - **L6 (2026-10-16, T2 evidence):** RED: 6 failed (missing method). GREEN: 258 passed; ruff, pyright clean. `list_recent_pages(space=None, limit, cursor)` in both clients over `/api/pages/recent` (UUID resolved through the allowlist before the request; results from disallowed spaces dropped; paging follows Docmost's page). New model `RecentPage` (no content; `updated_at`, `last_updated_by_id`, `space`). Fixture synthesized from baseFields + space; to be recorded in T6.
+- **L7 (2026-10-16, T3 evidence):** RED: collection ImportError. GREEN first run: 286 passed; ruff, pyright clean. `list_comments(page_id)` (always allowed; prechecks the page for allowlist/trash/UUID; drops `deletedAt` comments; plain text with mentions as `@label`, blocks on separate lines) and `create_comment(page_id, text, parent_comment_id=None)` (refused with `COMMENTS_DISABLED` before any request unless `DOCMOST_ALLOW_COMMENTS`, in both read modes; plain text → ProseMirror paragraphs built client-side, so no mention nodes can be sent; size capped; page precheck; `type: page`; a 403 is rethrown with a hint about the space's viewer-comments setting). New model `Comment`, error `CommentsDisabledError`.

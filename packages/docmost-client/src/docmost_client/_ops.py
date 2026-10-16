@@ -6,6 +6,7 @@ transport are thrown into the generator, so an operation can handle them. ``driv
 ``drive_async`` run an operation against a session.
 """
 
+import json
 import re
 from collections.abc import Awaitable, Callable, Generator
 from datetime import datetime
@@ -13,8 +14,9 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from docmost_client._content import check_content
+from docmost_client._content import check_content, check_size, comment_document
 from docmost_client.errors import (
+    CommentsDisabledError,
     DocmostError,
     InvalidRequestError,
     NotFoundError,
@@ -27,6 +29,7 @@ from docmost_client.errors import (
 from docmost_client.models import (
     CONTENT_FORMATS,
     CONTENT_OPERATIONS,
+    Comment,
     ContentFormat,
     ContentOperation,
     CurrentUser,
@@ -42,7 +45,7 @@ from docmost_client.policy import SpaceAllowlist
 from docmost_client.settings import DocmostSettings
 
 T = TypeVar("T")
-M = TypeVar("M", Space, PageSummary, RecentPage)
+M = TypeVar("M", Space, PageSummary, RecentPage, Comment)
 B = TypeVar("B", bound=BaseModel)
 
 Request = tuple[str, dict[str, Any]]
@@ -187,6 +190,51 @@ def list_recent_pages(
     page = _paginated(RecentPage, data)
     visible = [item for item in page.items if allowlist.allows(item.space.id, item.space.slug)]
     return page.model_copy(update={"items": visible})
+
+
+def list_comments(
+    allowlist: SpaceAllowlist, page_id: str, limit: int, cursor: str | None
+) -> Op[Paginated[Comment]]:
+    payload = _pagination(limit, cursor)
+    # Checks the page first: allowlist, trash, and its UUID.
+    page = yield from get_page(allowlist, page_id, "markdown")
+    data = yield ("/comments", {"pageId": page.id, **payload})
+    comments = _paginated(Comment, data)
+    visible = [comment for comment in comments.items if comment.deleted_at is None]
+    return comments.model_copy(update={"items": visible})
+
+
+def create_comment(
+    settings: DocmostSettings,
+    allowlist: SpaceAllowlist,
+    page_id: str,
+    text: str,
+    parent_comment_id: str | None,
+) -> Op[Comment]:
+    if not settings.allow_comments:
+        raise CommentsDisabledError(
+            "Adding comments is disabled; set DOCMOST_ALLOW_COMMENTS=1 to enable it."
+        )
+    if not text.strip():
+        raise InvalidRequestError("text must not be empty.")
+    if parent_comment_id is not None and not is_uuid(parent_comment_id):
+        raise InvalidRequestError("parent_comment_id must be a comment ID.")
+    document = json.dumps(comment_document(text), ensure_ascii=False, separators=(",", ":"))
+    check_size(document, settings.max_content_bytes)
+
+    page = yield from get_page(allowlist, page_id, "markdown")
+    payload: dict[str, Any] = {"pageId": page.id, "content": document, "type": "page"}
+    if parent_comment_id is not None:
+        payload["parentCommentId"] = parent_comment_id
+    try:
+        data = yield ("/comments/create", payload)
+    except PermissionDeniedError:
+        raise PermissionDeniedError(
+            "The account cannot comment on this page: it needs edit access, or the space "
+            "must allow viewer comments (space settings in Docmost).",
+            status_code=403,
+        ) from None
+    return _parse(Comment, _object(data))
 
 
 def search(
