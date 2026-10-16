@@ -34,6 +34,7 @@ from docmost_client.models import (
     PageSummary,
     Paginated,
     SearchHit,
+    SearchResults,
     Space,
 )
 from docmost_client.policy import SpaceAllowlist
@@ -182,7 +183,7 @@ def search(
     limit: int,
     offset: int,
     title_only: bool,
-) -> Op[list[SearchHit]]:
+) -> Op[SearchResults]:
     query = query.strip()
     if not query:
         raise InvalidRequestError("query must not be empty.")
@@ -197,7 +198,10 @@ def search(
         payload["titleOnly"] = True
     data = yield ("/search", payload)
     hits = [_parse(SearchHit, item) for item in _items(data)]
-    return [hit for hit in hits if allowlist.allows(hit.space.id, hit.space.slug)]
+    return SearchResults(
+        hits=[hit for hit in hits if allowlist.allows(hit.space.id, hit.space.slug)],
+        next_offset=offset + limit if len(hits) == limit else None,
+    )
 
 
 def create_page(

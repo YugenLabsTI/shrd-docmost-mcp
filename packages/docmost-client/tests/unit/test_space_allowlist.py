@@ -177,9 +177,11 @@ def test_search_drops_hits_from_disallowed_spaces(
     results["items"].append(results["items"][0] | {"id": "other", "space": OPS_SPACE})
     api.post(f"{API}/search").mock(return_value=wrapped(results))
 
-    hits = client.search("worker")
+    results = client.search("worker", limit=2)
 
-    assert [hit.space.slug for hit in hits] == ["engineering"]
+    assert [hit.space.slug for hit in results.hits] == ["engineering"]
+    # Paging follows what Docmost returned, not what survived the allowlist.
+    assert results.next_offset == 2
 
 
 def test_search_within_a_disallowed_space_is_refused_before_searching(

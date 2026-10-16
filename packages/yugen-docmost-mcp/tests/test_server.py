@@ -15,6 +15,7 @@ from docmost_client import (
     PageSummary,
     Paginated,
     SearchHit,
+    SearchResults,
     Space,
     SpaceNotAllowedError,
     SpaceRef,
@@ -77,7 +78,7 @@ class FakeWiki:
 
     async def search(
         self, query: str, *, space: str | None, limit: int, offset: int, title_only: bool
-    ) -> list[SearchHit]:
+    ) -> SearchResults:
         self._record(
             "search", query=query, space=space, limit=limit, offset=offset, title_only=title_only
         )
@@ -90,7 +91,8 @@ class FakeWiki:
             rank=0.5,
             highlight="restart the <b>worker</b> pool",
         )
-        return [hit] * limit
+        # One visible hit even for a full upstream page, as when the allowlist filters.
+        return SearchResults(hits=[hit], next_offset=offset + limit)
 
     async def get_page(self, page_id: str, *, format: ContentFormat) -> Page:
         self._record("get_page", page_id=page_id, format=format)
@@ -242,7 +244,7 @@ async def test_search_returns_hits_with_plain_snippets(wiki: FakeWiki) -> None:
     result = await call(build_server(wiki, writer=None), "search", query="worker", limit=2)
 
     hits = result.structured_content["hits"]
-    assert len(hits) == 2
+    assert len(hits) == 1
     assert hits[0] == {
         "page_id": "p1",
         "slug_id": "abc123xyz0",
@@ -418,3 +420,35 @@ async def test_update_page_rejects_malformed_json_content(wiki: FakeWiki) -> Non
 
     assert result.structured_content["error"]["code"] == "INVALID_INPUT"
     assert not any(name == "update_page" for name, _ in wiki.calls)
+
+
+@pytest.mark.parametrize("value", ["null", "123", "[1]"])
+async def test_identifier_arguments_are_never_json_decoded(wiki: FakeWiki, value: str) -> None:
+    result = await call(build_server(wiki, writer=None), "search", query="x", space=value)
+
+    assert result.is_error is False
+    _, kwargs = wiki.calls[-1]
+    assert kwargs["space"] == value
+
+
+async def test_empty_optional_identifiers_mean_not_given(wiki: FakeWiki) -> None:
+    await call(build_server(wiki, writer=None), "list_children", space="engineering", cursor="")
+
+    _, kwargs = wiki.calls[-1]
+    assert kwargs == {"space": "engineering", "parent_page_id": None, "limit": 20, "cursor": None}
+
+
+async def test_failed_compatibility_lookups_are_retried(wiki: FakeWiki) -> None:
+    from docmost_client import UpstreamError
+
+    wiki.compatibility = UpstreamError("down")
+    server = build_server(wiki, writer=None)
+    async with Client(server) as client:
+        first = await client.call_tool("list_spaces", {})
+        wiki.compatibility = CompatibilityReport(
+            status="supported", docmost_version="0.96.0", supported_versions=("0.96.0",)
+        )
+        second = await client.call_tool("list_spaces", {})
+
+    assert first.structured_content["error"]["code"] == "UPSTREAM_ERROR"
+    assert second.is_error is False

@@ -71,7 +71,9 @@ not supported.
 | `update_page` | write | `append`, `prepend`, or `replace` content and/or rename a page. |
 
 Failures return `is_error: true` with
-`{"error": {"code": "...", "message": "...", "retryable": false}}`. Codes:
+`{"error": {"code": "...", "message": "...", "retryable": false}}`. Arguments that do not
+match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
+SDK before the tool runs, with an untyped error message. Codes:
 `READ_ONLY`, `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
 `UNSUPPORTED_VERSION`. Invalid configuration stops the server at startup with a message

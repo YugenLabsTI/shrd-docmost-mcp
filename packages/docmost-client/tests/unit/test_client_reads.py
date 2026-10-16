@@ -264,9 +264,11 @@ def test_list_children_needs_a_space_or_parent(client: DocmostClient) -> None:
 def test_search_returns_hits(client: DocmostClient, api: respx.MockRouter) -> None:
     route = api.post(f"{API}/search").mock(return_value=wrapped(fixture("search")))
 
-    hits = client.search("worker")
+    results = client.search("worker")
+    hits = results.hits
 
     assert body(route) == {"query": "worker", "limit": 10, "offset": 0}
+    assert results.next_offset is None
     hit = hits[0]
     assert hit.id == PAGE_ID
     assert hit.slug_id == "abc123xyz0"
@@ -276,6 +278,14 @@ def test_search_returns_hits(client: DocmostClient, api: respx.MockRouter) -> No
     assert hit.highlight == "... restart the <b>worker</b> pool ..."
     assert hit.rank == pytest.approx(0.0759)
     assert hit.updated_at == datetime(2026, 10, 16, 10, 0, tzinfo=UTC)
+
+
+def test_a_full_page_of_hits_offers_the_next_offset(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    api.post(f"{API}/search").mock(return_value=wrapped(fixture("search")))
+
+    assert client.search("worker", limit=1, offset=4).next_offset == 5
 
 
 def test_search_within_a_space_slug_resolves_it(
@@ -384,7 +394,7 @@ async def test_async_client_has_the_same_reads(api: respx.MockRouter) -> None:
     async with AsyncDocmostClient(settings()) as client:
         page = await client.get_page(PAGE_ID)
         children = await client.list_children(parent_page_id="abc123xyz0")
-        hits = await client.search("worker")
+        hits = (await client.search("worker")).hits
         spaces = await client.list_spaces()
 
     assert page.title == "Runbook"

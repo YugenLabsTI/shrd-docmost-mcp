@@ -17,7 +17,7 @@ from docmost_client.models import (
     Page,
     PageSummary,
     Paginated,
-    SearchHit,
+    SearchResults,
     Space,
 )
 from docmost_client.policy import SpaceAllowlist
@@ -124,7 +124,7 @@ class DocmostClient:
         limit: int = DEFAULT_SEARCH_RESULTS,
         offset: int = 0,
         title_only: bool = False,
-    ) -> list[SearchHit]:
+    ) -> SearchResults:
         """Full-text search over pages the account can read."""
         return self._run(_ops.search(self._allowlist, query, space, limit, offset, title_only))
 
@@ -282,7 +282,7 @@ class AsyncDocmostClient:
         limit: int = DEFAULT_SEARCH_RESULTS,
         offset: int = 0,
         title_only: bool = False,
-    ) -> list[SearchHit]:
+    ) -> SearchResults:
         """Full-text search over pages the account can read."""
         return await self._run(
             _ops.search(self._allowlist, query, space, limit, offset, title_only)

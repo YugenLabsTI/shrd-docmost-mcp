@@ -14,7 +14,7 @@ from docmost_client import (
     Page,
     PageSummary,
     Paginated,
-    SearchHit,
+    SearchResults,
     Space,
 )
 
@@ -28,7 +28,7 @@ class WikiReader(Protocol):
 
     async def search(
         self, query: str, *, space: str | None, limit: int, offset: int, title_only: bool
-    ) -> list[SearchHit]: ...
+    ) -> SearchResults: ...
 
     async def get_page(self, page_id: str, *, format: ContentFormat) -> Page: ...
 

@@ -12,7 +12,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 from pydantic import AwareDatetime, Field
 
-from docmost_client import DocmostError, InvalidRequestError
+from docmost_client import DocmostError, InvalidRequestError, UnsupportedVersionError
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.ports import WikiReader, WikiWriter
 from yugen_docmost_mcp.results import (
@@ -45,7 +45,8 @@ _UPDATE = ToolAnnotations(
 
 _ERRORS = (
     "On failure the result has is_error=true and "
-    '{"error": {"code", "message", "retryable"}}. Codes: '
+    '{"error": {"code", "message", "retryable"}} (arguments that break the input schema '
+    "get a plain error message instead). Codes: "
 )
 
 INSTRUCTIONS = """\
@@ -83,28 +84,28 @@ class CompatibilityGate:
         self._reader = reader
         self._lock = anyio.Lock()
         self._done = False
-        self._failure: DocmostError | None = None
+        self._failure: UnsupportedVersionError | None = None
 
     async def ensure(self) -> None:
+        """Raise UnsupportedVersionError (cached) or a transient error (retried next call)."""
         async with self._lock:
-            if not self._done:
-                try:
-                    report = await self._reader.check_compatibility()
-                except DocmostError as exc:
-                    if exc.code == "UNSUPPORTED_VERSION":
-                        self._failure = exc
-                        self._done = True
-                    raise
-                if report.status != "supported":
-                    logger.warning(
-                        "Docmost version %s is %s; tested versions: %s",
-                        report.docmost_version or "unknown",
-                        report.status,
-                        ", ".join(report.supported_versions),
-                    )
-                self._done = True
-        if self._failure is not None:
-            raise self._failure
+            if self._failure is not None:
+                raise self._failure
+            if self._done:
+                return
+            try:
+                report = await self._reader.check_compatibility()
+            except UnsupportedVersionError as exc:
+                self._failure = exc
+                raise
+            if report.status != "supported":
+                logger.warning(
+                    "Docmost version %s is %s; tested versions: %s",
+                    report.docmost_version or "unknown",
+                    report.status,
+                    ", ".join(report.supported_versions),
+                )
+            self._done = True
 
 
 def build_server(
@@ -160,25 +161,25 @@ def _register_read_tools(
 ) -> None:
     async def search(
         query: Annotated[str, Field(description="Words to find in page titles and text.")],
-        space: Annotated[str | None, Field(description="Limit to one space (slug or id).")] = None,
+        space: Annotated[str, Field(description="Limit to one space (slug or id).")] = "",
         limit: Annotated[int, Field(ge=1, le=50, description="Maximum hits (1-50).")] = 10,
         offset: Annotated[int, Field(ge=0, description="Hits to skip, for paging.")] = 0,
         title_only: Annotated[bool, Field(description="Match titles only.")] = False,
     ) -> SearchResult:
-        hits = await reader.search(
-            query, space=space, limit=limit, offset=offset, title_only=title_only
+        results = await reader.search(
+            query, space=space or None, limit=limit, offset=offset, title_only=title_only
         )
-        next_offset = offset + limit if len(hits) == limit else None
-        return SearchResult(hits=[SearchHitItem.of(hit) for hit in hits], next_offset=next_offset)
+        return SearchResult(
+            hits=[SearchHitItem.of(hit) for hit in results.hits],
+            next_offset=results.next_offset,
+        )
 
     async def list_spaces(
         query: Annotated[str, Field(description="Filter by space name or description.")] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
-        cursor: Annotated[
-            str | None, Field(description="next_cursor from a previous call.")
-        ] = None,
+        cursor: Annotated[str, Field(description="next_cursor from a previous call.")] = "",
     ) -> SpacesResult:
-        page = await reader.list_spaces(limit=limit, cursor=cursor, query=query or None)
+        page = await reader.list_spaces(limit=limit, cursor=cursor or None, query=query or None)
         return SpacesResult(
             spaces=[SpaceItem.of(space) for space in page.items], next_cursor=page.next_cursor
         )
@@ -193,18 +194,19 @@ def _register_read_tools(
 
     async def list_children(
         space: Annotated[
-            str | None, Field(description="Space slug or id: list its top-level pages.")
-        ] = None,
+            str, Field(description="Space slug or id: list its top-level pages.")
+        ] = "",
         parent_page_id: Annotated[
-            str | None, Field(description="Page id or slug id: list its child pages.")
-        ] = None,
+            str, Field(description="Page id or slug id: list its child pages.")
+        ] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
-        cursor: Annotated[
-            str | None, Field(description="next_cursor from a previous call.")
-        ] = None,
+        cursor: Annotated[str, Field(description="next_cursor from a previous call.")] = "",
     ) -> ChildrenResult:
         page = await reader.list_children(
-            space=space, parent_page_id=parent_page_id, limit=limit, cursor=cursor
+            space=space or None,
+            parent_page_id=parent_page_id or None,
+            limit=limit,
+            cursor=cursor or None,
         )
         return ChildrenResult(
             pages=[ChildItem.of(child) for child in page.items], next_cursor=page.next_cursor
@@ -290,15 +292,15 @@ def _register_write_tools(
         ] = "",
         format: Annotated[Format, Field(description="Format of content.")] = "markdown",
         parent_page_id: Annotated[
-            str | None, Field(description="Create under this page (id or slug id).")
-        ] = None,
+            str, Field(description="Create under this page (id or slug id).")
+        ] = "",
     ) -> PageInfo:
         page = await writer.create_page(
             space=space,
             title=title,
             content=_decode(content, format),
             format=format,
-            parent_page_id=parent_page_id,
+            parent_page_id=parent_page_id or None,
             icon=None,
         )
         return PageInfo.of(page)
@@ -373,9 +375,9 @@ def _register_write_tools(
     )
 
 
-# Free-text parameters are typed plain `str` (empty meaning "not given"): the SDK
-# JSON-decodes string arguments of any other annotation, which would turn Markdown such
-# as "[1, 2]" or a title such as "null" into other types.
+# Every optional string parameter in this module is typed plain `str`, with "" meaning
+# "not given": the SDK JSON-decodes string arguments of any other annotation, which would
+# turn Markdown such as "[1, 2]" into a list or a space slug such as "null" into None.
 def _decode(content: str, format: Format) -> str | dict[str, Any] | None:
     if not content:
         return None
