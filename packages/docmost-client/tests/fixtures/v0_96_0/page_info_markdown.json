@@ -1,0 +1,16 @@
+{
+  "id": "0192b7a4-0000-7000-8000-0000000000c1", "slugId": "abc123xyz0", "title": "Runbook", "icon": null,
+  "coverPhoto": null, "position": "a0", "parentPageId": null,
+  "creatorId": "0192b7a4-0000-7000-8000-000000000002", "lastUpdatedById": "0192b7a4-0000-7000-8000-000000000002",
+  "spaceId": "0192b7a4-0000-7000-8000-0000000000b1", "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa",
+  "isLocked": false, "isBase": false, "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-10-16T10:00:00.000Z", "deletedAt": null,
+  "contributorIds": ["0192b7a4-0000-7000-8000-000000000002"],
+  "content": "# Runbook\n\nRestart the worker pool.\n",
+  "space": {"id": "0192b7a4-0000-7000-8000-0000000000b1", "name": "Engineering", "slug": "engineering"},
+  "creator": {"id": "0192b7a4-0000-7000-8000-000000000002", "name": "Ana", "avatarUrl": null},
+  "lastUpdatedBy": {"id": "0192b7a4-0000-7000-8000-000000000002", "name": "Ana", "avatarUrl": null},
+  "contributors": [{"id": "0192b7a4-0000-7000-8000-000000000002", "name": "Ana", "avatarUrl": null}],
+  "deletedBy": null,
+  "permissions": {"canEdit": true, "hasRestriction": false}
+}

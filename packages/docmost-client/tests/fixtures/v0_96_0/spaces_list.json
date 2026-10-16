@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000b1", "name": "Engineering", "description": "Runbooks and design docs",
+      "slug": "engineering", "logo": null, "visibility": "private", "defaultRole": "writer",
+      "isPersonal": false, "settings": null, "creatorId": "0192b7a4-0000-7000-8000-000000000002",
+      "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z", "deletedAt": null, "memberCount": 5,
+      "membership": {"userId": "0192b7a4-0000-7000-8000-000000000001", "role": "writer"}
+    },
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000b2", "name": "Operations", "description": null,
+      "slug": "ops", "logo": null, "visibility": "private", "defaultRole": "reader",
+      "isPersonal": false, "settings": null, "creatorId": "0192b7a4-0000-7000-8000-000000000002",
+      "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z", "deletedAt": null, "memberCount": 2,
+      "membership": {"userId": "0192b7a4-0000-7000-8000-000000000001", "role": "reader"}
+    }
+  ],
+  "meta": {"limit": 20, "hasNextPage": true, "hasPrevPage": false, "nextCursor": "Y3Vyc29yLTE", "prevCursor": null}
+}

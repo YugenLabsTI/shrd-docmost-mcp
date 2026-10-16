@@ -1,0 +1,41 @@
+{
+  "content": "<h1 xmlns=\"http://www.w3.org/1999/xhtml\" data-id=\"qikuguhmkvzu\" dir=\"auto\" id=\"qikuguhmkvzu\">Runbook</h1><p xmlns=\"http://www.w3.org/1999/xhtml\" data-id=\"efwwujxmdtcw\" dir=\"auto\">Restart the worker pool when the queue backs up.</p><ul xmlns=\"http://www.w3.org/1999/xhtml\" dir=\"auto\"><li dir=\"auto\"><p data-id=\"hikxmyasbjhq\" dir=\"auto\">Check metrics</p></li><li dir=\"auto\"><p data-id=\"zzuotjlwlwga\" dir=\"auto\">Drain the queue</p></li></ul>",
+  "contributorIds": [],
+  "contributors": [],
+  "coverPhoto": null,
+  "createdAt": "2026-10-16T17:30:09.115Z",
+  "creator": {
+    "avatarUrl": null,
+    "id": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+    "name": "Admin"
+  },
+  "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+  "deletedAt": null,
+  "deletedBy": null,
+  "icon": null,
+  "id": "01a145c3-995b-7b79-9e4c-af4b5be3dbaf",
+  "isBase": false,
+  "isLocked": false,
+  "lastUpdatedBy": {
+    "avatarUrl": null,
+    "id": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+    "name": "Admin"
+  },
+  "lastUpdatedById": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+  "parentPageId": null,
+  "permissions": {
+    "canEdit": false,
+    "hasRestriction": false
+  },
+  "position": "a074E",
+  "slugId": "ls6M6qzSU4",
+  "space": {
+    "id": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+    "name": "Engineering",
+    "slug": "engineering"
+  },
+  "spaceId": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+  "title": "Runbook",
+  "updatedAt": "2026-10-16T17:30:09.115Z",
+  "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+}

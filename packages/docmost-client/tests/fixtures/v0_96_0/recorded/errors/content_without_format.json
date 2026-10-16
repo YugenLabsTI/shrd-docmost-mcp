@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "Bad Request",
+    "message": [
+      "format must be one of the following values: json, markdown, html"
+    ],
+    "statusCode": 400
+  },
+  "status": 400
+}

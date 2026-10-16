@@ -1,0 +1,24 @@
+[project]
+name = "docmost-client"
+version = "0.1.0"
+description = "Unofficial typed Python client for the internal API of self-hosted Docmost Community Edition."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Yugen Labs" }]
+keywords = ["docmost", "wiki", "client", "api"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "anyio>=4.15.1,<5",
+    "httpx>=0.28.1,<1",
+    "pydantic>=2.14.1,<3",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12"]
+build-backend = "uv_build"

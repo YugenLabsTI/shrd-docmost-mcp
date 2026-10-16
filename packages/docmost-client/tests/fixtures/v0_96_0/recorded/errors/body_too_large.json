@@ -1,0 +1,9 @@
+{
+  "body": {
+    "code": "FST_ERR_CTP_BODY_TOO_LARGE",
+    "error": "Payload Too Large",
+    "message": "Request body is too large",
+    "statusCode": 413
+  },
+  "status": 413
+}
