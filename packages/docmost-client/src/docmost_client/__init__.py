@@ -11,6 +11,7 @@ from docmost_client.errors import (
     NotFoundError,
     PermissionDeniedError,
     RateLimitedError,
+    SpaceNotAllowedError,
     UnsupportedVersionError,
     UpstreamError,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "SearchHit",
     "Session",
     "Space",
+    "SpaceNotAllowedError",
     "SpaceRef",
     "UnsupportedVersionError",
     "UpstreamError",
