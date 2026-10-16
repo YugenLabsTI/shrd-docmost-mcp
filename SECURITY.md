@@ -30,7 +30,9 @@ data (prompt injection). The design limits what a misled agent can do.
   with the `reader` role unless writes are required.
 - Provide the password through `DOCMOST_PASSWORD_FILE` (for example a Docker or
   Kubernetes secret) instead of `DOCMOST_PASSWORD`.
-- Set `DOCMOST_ALLOWED_SPACES` even when the account's membership is already narrow.
+- Set `DOCMOST_ALLOWED_SPACES` even when the account's membership looks narrow: Docmost
+  adds every new member to the workspace's default space with the **writer** role.
+  Alternatively, remove the account from the default space.
 - Enable writes (`DOCMOST_READ_ONLY=0`) only for agents that need them.
 
 ## Out of scope

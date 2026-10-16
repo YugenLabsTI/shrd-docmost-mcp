@@ -523,6 +523,8 @@ Residual races that the precheck cannot close: (a) the window between step 2 and
 
 ## 8. Open questions (need a running instance or deployment facts)
 
+Answers observed on a running instance are in [section 9](#9-observed-on-a-running-docmost-0960).
+
 1. **EE bundling in `docmost/docmost:0.96.0`.** The `ee` submodule is private, so the source cannot show whether the published image includes the MFA / Typesense / API-key modules, nor how MFA behaves without a license. Determines whether login can return an MFA challenge.
 2. **Deployment settings** that change behavior: `APP_URL` scheme (cookie `Secure`), `JWT_TOKEN_EXPIRES_IN` (user reports `30d`), `COLLAB_DISABLE_REDIS` (silent content no-op if `true`), `SEARCH_DRIVER`, whether collaboration runs in a separate process (30 s proxy timeout path), and any reverse-proxy body-size or rate limits.
 3. **Exact error bodies** for Fastify-level 413, throttler 429, and validation 400 (NestJS defaults are assumed; record fixtures).
@@ -534,3 +536,28 @@ Residual races that the precheck cannot close: (a) the window between step 2 and
 9. **`/api/version` latency/failure** when the server has no outbound internet (it calls `api.github.com` per request).
 
 Recommendation for questions 3–8: record contract fixtures against a **local, disposable** Docmost 0.96.0 (Docker Compose), never against the production instance (S14).
+
+---
+
+## 9. Observed on a running Docmost 0.96.0
+
+Observed on 2026-10-16 against the local, disposable instance from `dev/docmost`
+(`docmost/docmost:0.96.0`, Postgres 18, Redis 8). Recorded bodies live in
+`packages/docmost-client/tests/fixtures/v0_96_0/recorded/`; behavior is pinned by
+`tests/contract/` and the opt-in `tests/integration/` suites.
+
+| Question (section 8) | Observed |
+|---|---|
+| 1. EE bundling | The image bundles the MFA module: a successful login also sends `Set-Cookie: mfaToken=; Max-Age=0` before `authToken`. Accounts with MFA cannot use password-only login. |
+| 3. Error bodies | 413 `{"message": "Request body is too large", ...}` (body over 1 MiB); 429 `"Too many requests"` after 10 logins/min; 400 validation messages as arrays, e.g. `["operation must be one of the following values: append, prepend, replace"]`; reader writing → 403 `"Forbidden"`; non-member space → 404 `"Space permissions not found"`; bad credentials → 401 `"Email or password does not match"`. |
+| 4. `content` without `format` | Rejected: 400 `["format must be one of the following values: json, markdown, html"]`. |
+| 5. Login body | `{"success":true,"status":200}` (no `data`); `authToken` cookie is `HttpOnly; SameSite=Lax; Path=/` with `Expires` = now + `JWT_TOKEN_EXPIRES_IN`, no `Secure` when `APP_URL` is `http://`. |
+| 6. Markdown fidelity | Read as markdown: a table's header row becomes a body row under an empty header; bold inside task items is lost; underline and text color are dropped; highlight survives as `==text==`; callouts as `:::warning`; details as raw `<details>` HTML. A rich page copied through `html` (read html → create with that html) reads back identical. Writing markdown: a single newline becomes a hard break (`line one  \nline two`). |
+| 6. Front matter | Writing `---\nIntro\n---\nBody` as markdown stores only `Body`: the text between the dashes is deleted (the client refuses such input). |
+| 8. JSON strictness | Unknown node types are stripped and their children kept; structurally invalid content (text directly inside a `bulletList`) is accepted; an unknown mark is rejected with 400 `"Invalid content format"`. |
+| — HTML input | `<script>` elements and `on*` attributes are dropped. |
+| — Empty content | `content: ""` is ignored: the page is created without content (the client refuses empty content). |
+| — Default space | Docmost adds every new workspace member to the workspace's default space (`general` on a fresh install) with the **writer** role. |
+
+Still open: 2 (deployment settings of the production instance), 7 (concurrent `replace`
+while a user types), and 9 (`/api/version` without outbound internet).

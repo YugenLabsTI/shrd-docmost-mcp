@@ -15,7 +15,9 @@ internal API the Docmost web app uses, with read-only access by default.
 ## Quick path
 
 1. Create a dedicated Docmost account for the agent and add it only to the spaces it
-   needs, with the lowest role that works (reader for read-only use).
+   needs, with the lowest role that works (reader for read-only use). Docmost also adds
+   new members to the default space as writers: remove it there or use
+   `DOCMOST_ALLOWED_SPACES`.
 2. Configure your MCP host to run the server with that account:
 
    ```json
@@ -126,8 +128,8 @@ refused unless `DOCMOST_ALLOW_UNTESTED_VERSION=1`. If Docmost cannot report its 
   and `prepend`.
 - **Mentions are not written.** Content containing mention nodes is rejected, because
   mentions notify users.
-- **Contract fixtures are synthesized** from the v0.96.0 source, not recorded from a
-  running instance yet.
+- **Live editing.** What a `replace` does to text a user is typing at that moment has
+  not been observed yet.
 
 ## Development
 
@@ -137,6 +139,14 @@ uv run pytest            # tests (HTTP mocked with respx; no Docmost needed)
 uv run ruff check .      # lint
 uv run ruff format .     # format
 uv run pyright           # types (strict on src)
+```
+
+Integration tests run against a local, disposable Docmost (see
+[dev/docmost](dev/docmost/README.md)):
+
+```bash
+set -a; . dev/docmost/.env.test; set +a
+DOCMOST_INTEGRATION=1 uv run pytest -m integration
 ```
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/).

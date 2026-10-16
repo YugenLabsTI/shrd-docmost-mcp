@@ -405,3 +405,21 @@ def test_concurrent_401s_with_the_same_stale_token_relogin_once(api: respx.MockR
             list(pool.map(lambda _: session.call("/users/me"), range(4)))
 
     assert login.call_count == 2
+
+
+async def test_token_is_found_among_several_cookies(caller: Caller, api: respx.MockRouter) -> None:
+    # Observed on Docmost 0.96.0: login first clears mfaToken, then sets authToken.
+    login = httpx.Response(
+        200,
+        json={"success": True, "status": 200},
+        headers=[
+            ("set-cookie", "mfaToken=; Max-Age=0; Path=/; SameSite=Lax"),
+            ("set-cookie", f"authToken={TOKEN}; Path=/; HttpOnly; SameSite=Lax"),
+        ],
+    )
+    api.post(f"{API}/auth/login").mock(return_value=login)
+    me = api.post(f"{API}/users/me").mock(return_value=wrapped({}))
+
+    await caller.call("/users/me")
+
+    assert me.calls[0].request.headers["authorization"] == f"Bearer {TOKEN}"
