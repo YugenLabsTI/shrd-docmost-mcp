@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "canEdit": false,
+      "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+      "deletedAt": null,
+      "hasChildren": true,
+      "icon": null,
+      "id": "01a145c3-995b-7b79-9e4c-af4b5be3dbaf",
+      "isBase": false,
+      "parentPageId": null,
+      "position": "a074E",
+      "slugId": "ls6M6qzSU4",
+      "spaceId": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+      "title": "Runbook"
+    },
+    {
+      "canEdit": false,
+      "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+      "deletedAt": null,
+      "hasChildren": false,
+      "icon": null,
+      "id": "01a145c3-9a43-74e1-b419-de3bb8ceea72",
+      "isBase": false,
+      "parentPageId": null,
+      "position": "a1BG6",
+      "slugId": "GZmKurZiFn",
+      "spaceId": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+      "title": "Rich page"
+    }
+  ],
+  "meta": {
+    "hasNextPage": false,
+    "hasPrevPage": false,
+    "limit": 20,
+    "nextCursor": null,
+    "prevCursor": null
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "createdAt": "2026-10-16T17:30:08.076Z",
+  "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+  "defaultRole": "writer",
+  "deletedAt": null,
+  "description": "",
+  "id": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+  "isPersonal": false,
+  "isPublished": false,
+  "logo": null,
+  "memberCount": 2,
+  "membership": {
+    "permissions": [
+      {
+        "action": "read",
+        "subject": "settings"
+      },
+      {
+        "action": "read",
+        "subject": "member"
+      },
+      {
+        "action": "read",
+        "subject": "page"
+      },
+      {
+        "action": "read",
+        "subject": "share"
+      }
+    ],
+    "role": "reader",
+    "userId": "01a145c3-975b-7779-a453-68c6e3047774"
+  },
+  "name": "Engineering",
+  "settings": null,
+  "slug": "engineering",
+  "updatedAt": "2026-10-16T17:30:08.076Z",
+  "visibility": "private",
+  "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+}

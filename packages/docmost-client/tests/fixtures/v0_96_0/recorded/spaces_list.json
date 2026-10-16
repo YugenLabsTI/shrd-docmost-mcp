@@ -1,0 +1,74 @@
+{
+  "items": [
+    {
+      "createdAt": "2026-10-16T17:30:08.076Z",
+      "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+      "defaultRole": "writer",
+      "deletedAt": null,
+      "description": "",
+      "id": "01a145c3-9551-77d7-b5ec-1bd2ce353210",
+      "isPersonal": false,
+      "logo": null,
+      "memberCount": 2,
+      "membership": {
+        "role": "reader",
+        "userId": "01a145c3-975b-7779-a453-68c6e3047774"
+      },
+      "name": "Engineering",
+      "settings": null,
+      "slug": "engineering",
+      "updatedAt": "2026-10-16T17:30:08.076Z",
+      "visibility": "private",
+      "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+    },
+    {
+      "createdAt": "2026-10-16T17:30:07.322Z",
+      "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+      "defaultRole": "writer",
+      "deletedAt": null,
+      "description": "",
+      "id": "01a145c3-93bc-7273-92ec-9be73422e05d",
+      "isPersonal": false,
+      "logo": null,
+      "memberCount": 2,
+      "membership": {
+        "role": "writer",
+        "userId": "01a145c3-975b-7779-a453-68c6e3047774"
+      },
+      "name": "General",
+      "settings": null,
+      "slug": "general",
+      "updatedAt": "2026-10-16T17:30:07.322Z",
+      "visibility": "private",
+      "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+    },
+    {
+      "createdAt": "2026-10-16T17:30:08.091Z",
+      "creatorId": "01a145c3-93b3-7dd7-9fe6-03769323f577",
+      "defaultRole": "writer",
+      "deletedAt": null,
+      "description": "",
+      "id": "01a145c3-955d-76ee-aa03-18f289a1bc75",
+      "isPersonal": false,
+      "logo": null,
+      "memberCount": 2,
+      "membership": {
+        "role": "writer",
+        "userId": "01a145c3-975b-7779-a453-68c6e3047774"
+      },
+      "name": "Sandbox",
+      "settings": null,
+      "slug": "sandbox",
+      "updatedAt": "2026-10-16T17:30:08.091Z",
+      "visibility": "private",
+      "workspaceId": "01a145c3-93b6-790a-8a72-da2ff2091384"
+    }
+  ],
+  "meta": {
+    "hasNextPage": false,
+    "hasPrevPage": false,
+    "limit": 20,
+    "nextCursor": null,
+    "prevCursor": null
+  }
+}
