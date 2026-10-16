@@ -199,3 +199,11 @@ def test_reads_process_environment_by_default(monkeypatch: pytest.MonkeyPatch) -
         monkeypatch.setenv(key, value)
 
     assert DocmostSettings.from_env().email == "bot@example.com"
+
+
+def test_untested_docmost_versions_are_refused_by_default() -> None:
+    assert DocmostSettings.from_env(env()).allow_untested_version is False
+    assert (
+        DocmostSettings.from_env(env(DOCMOST_ALLOW_UNTESTED_VERSION="1")).allow_untested_version
+        is True
+    )

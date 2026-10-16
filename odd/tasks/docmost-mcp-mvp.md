@@ -30,8 +30,8 @@ Test runner: `uv run pytest` (respx for HTTP mocks); lint `uv run ruff check`, t
 | T0 | S5, S15 | delegated (parallel with T1, disjoint surface `docs/docmost-api-v0.96.0.md`) | done | L11; commit `docs: add Docmost v0.96.0 API reference` |
 | T1 | S1-S3, S11, S16 | inline | done | L8; commit `chore: scaffold uv workspace` |
 | T2 | S6, S7, S8, S10 | inline | done | L9; commit `feat(client): load secure settings from environment` |
-| T3 | S1, S6, S10 | inline | done (verifier pending) | L12; commit `feat(client): add authenticated sync and async sessions` |
-| T4 | S1, S4, S5, S12, S15 | inline | pending | |
+| T3 | S1, S6, S10 | inline | done | L12; commit `feat(client): add authenticated sync and async sessions` |
+| T4 | S1, S4, S5, S12, S15 | inline | done | L14; commit `feat(client): add typed read operations` |
 | T5 | S8, S9 | inline | pending | |
 | T6 | S4, S5, S15 | inline | pending | |
 | T7 | S2, S3, S4, S5, S12 | inline | pending | |
@@ -142,3 +142,5 @@ Forecast: ~3000 authored changed lines → exceeds 400; chain strategy to be con
   - T7 tool guidance: read markdown for comprehension; `replace` on rich pages via html round-trip (lossless enough); markdown append/prepend fine; json for exact structure.
   - Open questions needing a disposable local Docmost 0.96.0 (never the live instance): error bodies 413/429/400, content without format, Set-Cookie behind proxy, markdown fidelity of tables/details/embeds, replace during live typing, json validation strictness, `/api/version` offline.
 - **L12 (2026-10-16, T3 evidence):** RED: collection ImportError. First GREEN attempt failed `test_logs_in_once_and_sends_bearer_token_only` — the cookie jar still stored `authToken` because httpx copies an `httpx.Cookies` into a default jar (dropping the policy); fixed by passing a `CookieJar` with a reject-all policy directly. GREEN: 88 passed (sync and async parametrized); ruff, pyright strict on src (tests on standard because respx is partially typed) clean. Sync/async share `_protocol.py` (I/O-free); `anyio` added as an explicit dep (already transitive via httpx) for the async login lock.
+- **L13 (2026-10-16, native review):** user granted review of slice d959d34..36af8b3 (T2, CI hardening, T0 doc, T3); lenses risk + reliability; outcome **approved**, acknowledged (`gentle-ai.review-acknowledged/v1`, lineage review-e9714025609dd1b5). Reviewed boundary → 36af8b3. Non-blocking advisories (fixed in a follow-up `fix(client)` commit): session use after close re-logs in on a closed client; empty `DOCMOST_PASSWORD=""` plus `_FILE` wrongly rejected as ambiguous; no thread single-flight test; untested settings branches (oversized/invalid-UTF-8 secret file, nan/inf timeout, IPv6 host).
+- **L14 (2026-10-16, T4 evidence):** RED: collection ImportError. GREEN: 120 passed (py3.12 and py3.11); ruff, pyright strict clean. Operations are I/O-free generators in `_ops.py` driven by `drive`/`drive_async` (sync/async parity without codegen). Fixtures in `tests/fixtures/v0_96_0` are synthesized from source types (README says so); recorded fixtures from a disposable local Docmost 0.96.0 remain a follow-up. Response validation errors map to `UPSTREAM_ERROR` without echoing input (page bodies). Version gate per L11 (`DOCMOST_ALLOW_UNTESTED_VERSION`).
