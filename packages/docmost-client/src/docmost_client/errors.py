@@ -5,6 +5,7 @@ server) can map failures without parsing messages. Messages never include creden
 tokens, or page bodies.
 """
 
+from datetime import datetime
 from typing import ClassVar
 
 
@@ -73,3 +74,23 @@ class SpaceNotAllowedError(DocmostError):
     """The resource belongs to a space outside DOCMOST_ALLOWED_SPACES."""
 
     code: ClassVar[str] = "SPACE_NOT_ALLOWED"
+
+
+class ReadOnlyError(DocmostError):
+    """A write was attempted while DOCMOST_READ_ONLY is enabled (the default)."""
+
+    code: ClassVar[str] = "READ_ONLY"
+
+
+class StalePageError(DocmostError):
+    """The page changed after the caller read it (``updatedAt`` precheck failed).
+
+    The check narrows but cannot close the race: Docmost has no compare-and-swap, and
+    edits typed in the browser are persisted up to ~45 s later.
+    """
+
+    code: ClassVar[str] = "STALE_PAGE"
+
+    def __init__(self, message: str, *, current_updated_at: datetime) -> None:
+        super().__init__(message)
+        self.current_updated_at = current_updated_at
