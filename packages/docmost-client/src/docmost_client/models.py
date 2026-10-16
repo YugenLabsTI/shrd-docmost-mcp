@@ -127,6 +127,20 @@ class SearchHit(_Model):
     highlight: str | None = None
 
 
+class SearchResults(BaseModel):
+    """One page of search hits.
+
+    ``next_offset`` is set when Docmost returned a full page, so more hits may follow.
+    It is computed before allowlist filtering: ``hits`` can be shorter than the limit
+    while ``next_offset`` is still set.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    hits: list[SearchHit]
+    next_offset: int | None = None
+
+
 class Paginated(BaseModel, Generic[T]):
     """One page of a cursor-paginated listing. Page on ``next_cursor``, not item count."""
 

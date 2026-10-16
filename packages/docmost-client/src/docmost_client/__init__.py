@@ -28,6 +28,7 @@ from docmost_client.models import (
     PageSummary,
     Paginated,
     SearchHit,
+    SearchResults,
     Space,
     SpaceRef,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "RateLimitedError",
     "ReadOnlyError",
     "SearchHit",
+    "SearchResults",
     "Session",
     "Space",
     "SpaceNotAllowedError",

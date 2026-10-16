@@ -49,7 +49,9 @@ def api(respx_mock: respx.MockRouter) -> respx.MockRouter:
     respx_mock.post(f"{API}/auth/login").mock(
         return_value=httpx.Response(200, headers={"set-cookie": "authToken=tok; Path=/"}, json={})
     )
-    respx_mock.post(f"{API}/auth/logout").mock(return_value=httpx.Response(200, json={}))
+    respx_mock.post(f"{API}/auth/logout", name="logout").mock(
+        return_value=httpx.Response(200, json={})
+    )
     respx_mock.post(f"{API}/version").mock(return_value=wrapped(fixture("version")))
     return respx_mock
 
@@ -122,3 +124,14 @@ async def test_failures_never_log_credentials_or_content(
         assert PASSWORD not in text
         assert "TOP SECRET BODY" not in text
         assert "tok" not in text.replace("token", "")
+
+
+@pytest.mark.anyio
+@pytest.mark.respx(assert_all_called=False)
+async def test_shutdown_logs_out_to_revoke_the_session(api: respx.MockRouter) -> None:
+    api.post(f"{API}/search").mock(return_value=wrapped(fixture("search")))
+
+    async with Client(create_server(settings())) as client:
+        await client.call_tool("search", {"query": "worker"})
+
+    assert api.routes["logout"].call_count == 1
