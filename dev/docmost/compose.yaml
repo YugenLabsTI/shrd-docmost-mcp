@@ -1,0 +1,45 @@
+# Local, disposable Docmost 0.96.0 for recording fixtures and running integration tests.
+# Never point this tooling at a production instance.
+#
+#   docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env up -d
+#
+# dev/docmost/.env (git-ignored) must define APP_SECRET and POSTGRES_PASSWORD; the
+# bootstrap script creates it.
+name: docmost-dev
+
+services:
+  docmost:
+    image: docmost/docmost:0.96.0
+    depends_on:
+      - db
+      - redis
+    environment:
+      APP_URL: "http://localhost:3000"
+      APP_SECRET: "${APP_SECRET:?set in dev/docmost/.env}"
+      DATABASE_URL: "postgresql://docmost:${POSTGRES_PASSWORD:?set in dev/docmost/.env}@db:5432/docmost"
+      REDIS_URL: "redis://redis:6379"
+      JWT_TOKEN_EXPIRES_IN: "30d"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - docmost:/app/data/storage
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: docmost
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set in dev/docmost/.env}"
+    volumes:
+      - db_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+
+volumes:
+  docmost:
+  db_data:
+  redis_data:
