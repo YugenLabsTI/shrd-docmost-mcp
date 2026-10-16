@@ -17,6 +17,14 @@ from yugen_docmost_mcp.__main__ import confirm_replace_from_env, create_server, 
 BASE = "https://wiki.example.com"
 API = f"{BASE}/api"
 PASSWORD = "s3cr3t-Pa55word!"
+READ_TOOLS = {
+    "search",
+    "list_spaces",
+    "get_page",
+    "list_children",
+    "list_recent_pages",
+    "list_comments",
+}
 FIXTURES = Path(__file__).parents[2] / "docmost-client" / "tests" / "fixtures" / "v0_96_0"
 
 
@@ -149,3 +157,41 @@ def test_replace_confirmation_flag(raw: str | None, expected: bool) -> None:
 def test_invalid_replace_confirmation_flag_is_a_config_error() -> None:
     with pytest.raises(ConfigError, match="DOCMOST_CONFIRM_REPLACE"):
         confirm_replace_from_env({"DOCMOST_CONFIRM_REPLACE": "maybe"})
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("allow", "read_only", "expected"),
+    [
+        ("0", "1", set()),
+        ("1", "1", {"add_comment"}),
+        ("0", "0", {"create_page", "update_page"}),
+        ("1", "0", {"add_comment", "create_page", "update_page"}),
+    ],
+)
+async def test_permission_matrix_controls_the_write_tools(
+    allow: str, read_only: str, expected: set[str]
+) -> None:
+    server = create_server(settings(DOCMOST_ALLOW_COMMENTS=allow, DOCMOST_READ_ONLY=read_only))
+    async with Client(server) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+
+    assert names - READ_TOOLS == expected
+
+
+def test_invalid_replace_confirmation_flag_stops_startup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for key, value in {
+        "DOCMOST_BASE_URL": BASE,
+        "DOCMOST_EMAIL": "bot@example.com",
+        "DOCMOST_PASSWORD": PASSWORD,
+        "DOCMOST_CONFIRM_REPLACE": "maybe",
+    }.items():
+        monkeypatch.setenv(key, value)
+
+    with pytest.raises(SystemExit) as exc:
+        main([])
+
+    assert exc.value.code == 2
+    assert "DOCMOST_CONFIRM_REPLACE" in capsys.readouterr().err

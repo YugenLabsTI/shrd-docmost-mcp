@@ -8,18 +8,24 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, ParamSpec, TypeVar, cast
 
 import anyio
-from mcp.server.mcpserver import MCPServer
-from mcp_types import ToolAnnotations
-from pydantic import AwareDatetime, BeforeValidator, Field
+from mcp.server.elicitation import AcceptedElicitation, ElicitationResult
+from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
+from mcp_types import ClientCapabilities, ElicitationCapability, ToolAnnotations
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field
 
 from docmost_client import DocmostError, InvalidRequestError, UnsupportedVersionError
 from yugen_docmost_mcp._version import __version__
-from yugen_docmost_mcp.ports import WikiReader, WikiWriter
+from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
+from yugen_docmost_mcp.ports import WikiCommenter, WikiReader, WikiWriter
 from yugen_docmost_mcp.results import (
     ChildItem,
     ChildrenResult,
+    CommentItem,
+    CommentsResult,
     PageContent,
     PageInfo,
+    RecentPageItem,
+    RecentPagesResult,
     SearchHitItem,
     SearchResult,
     SpaceItem,
@@ -49,6 +55,9 @@ _READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 _CREATE = ToolAnnotations(
     read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
 )
+_COMMENT = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
+)
 _UPDATE = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
 )
@@ -63,11 +72,13 @@ INSTRUCTIONS = """\
 Unofficial MCP server for a self-hosted Docmost wiki (Community Edition).
 
 Workflow:
-1. Find pages with `search` (full text) or browse with `list_spaces` then `list_children`.
+1. Find pages with `search` (full text), browse with `list_spaces` then `list_children`, or
+   see what changed lately with `list_recent_pages`.
 2. Read a page with `get_page` before quoting or changing it; its `updated_at` identifies
    the version you read. Use the `id` values returned by these tools; slugs also work
    where noted.
 3. {write_hint}
+4. {comment_hint}
 
 Formats: read as markdown to understand a page. Write markdown for new prose. To rewrite a
 rich page (tables, comments, mentions, diagrams, colors), read it as html and replace it
@@ -81,6 +92,14 @@ _WRITE_HINT = (
     "`updated_at` you read, so concurrent edits are not overwritten. Prefer append or "
     "prepend; use replace only when asked to rewrite the page."
 )
+_COMMENT_HINT = (
+    "Comments: `list_comments` reads a page's discussion; `add_comment` adds a comment or a "
+    "reply. Prefer a comment over editing when proposing a change someone should review."
+)
+_NO_COMMENT_HINT = (
+    "Comments: `list_comments` reads a page's discussion; this server cannot add comments."
+)
+_CONFIRM_HINT = " A `replace` asks the user to confirm first; if they decline, nothing is written."
 _READ_ONLY_HINT = (
     "This server is read-only: it cannot create or change pages. Tell the user if a change "
     "is needed."
@@ -122,11 +141,21 @@ def build_server(
     reader: WikiReader,
     writer: WikiWriter | None,
     *,
+    commenter: WikiCommenter | None = None,
+    confirm_replace: bool = True,
     on_shutdown: Callable[[], Awaitable[None]] | None = None,
 ) -> MCPServer:
-    """Build the MCP server. Write tools are registered only when ``writer`` is given."""
+    """Build the MCP server.
+
+    Page write tools are registered only with ``writer``, and ``add_comment`` only with
+    ``commenter``. With ``confirm_replace``, a replace asks the user to confirm first.
+    """
+    write_hint = _READ_ONLY_HINT
+    if writer is not None:
+        write_hint = _WRITE_HINT + (_CONFIRM_HINT if confirm_replace else "")
     instructions = INSTRUCTIONS.format(
-        write_hint=_READ_ONLY_HINT if writer is None else _WRITE_HINT
+        write_hint=write_hint,
+        comment_hint=_NO_COMMENT_HINT if commenter is None else _COMMENT_HINT,
     )
 
     @asynccontextmanager
@@ -146,8 +175,10 @@ def build_server(
     )
     gate = CompatibilityGate(reader)
     _register_read_tools(server, reader, gate)
+    if commenter is not None:
+        _register_comment_tool(server, commenter, gate)
     if writer is not None:
-        _register_write_tools(server, writer, gate)
+        _register_write_tools(server, writer, gate, confirm_replace)
     return server
 
 
@@ -228,6 +259,35 @@ def _register_read_tools(
             pages=[ChildItem.of(child) for child in page.items], next_cursor=page.next_cursor
         )
 
+    async def list_recent_pages(
+        space: Annotated[
+            OptionalText, Field(description="Limit to one space (slug or id); empty for all.")
+        ] = "",
+        limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
+        cursor: Annotated[
+            OptionalText, Field(description="next_cursor from a previous call.")
+        ] = "",
+    ) -> RecentPagesResult:
+        page = await reader.list_recent_pages(
+            space=space or None, limit=limit, cursor=cursor or None
+        )
+        return RecentPagesResult(
+            pages=[RecentPageItem.of(item) for item in page.items], next_cursor=page.next_cursor
+        )
+
+    async def list_comments(
+        page_id: Annotated[str, Field(description="Page id or slug id.")],
+        limit: Annotated[int, Field(ge=1, le=100, description="Page size (1-100).")] = 20,
+        cursor: Annotated[
+            OptionalText, Field(description="next_cursor from a previous call.")
+        ] = "",
+    ) -> CommentsResult:
+        page = await reader.list_comments(page_id, limit=limit, cursor=cursor or None)
+        return CommentsResult(
+            comments=[CommentItem.of(comment) for comment in page.items],
+            next_cursor=page.next_cursor,
+        )
+
     server.add_tool(
         _guarded(gate, search),
         name="search",
@@ -295,10 +355,132 @@ def _register_read_tools(
         structured_output=True,
     )
 
+    server.add_tool(
+        _guarded(gate, list_recent_pages),
+        name="list_recent_pages",
+        title="List recently updated pages",
+        description=(
+            "List pages by most recent update, across the accessible spaces or in one space. "
+            "Use it to answer 'what changed lately?' or to find a page someone just edited. "
+            "Returns id, title, space, parent_page_id and updated_at (no content). Page "
+            "with next_cursor. "
+            + _ERRORS
+            + "SPACE_NOT_ALLOWED, FORBIDDEN, NOT_FOUND, INVALID_INPUT, AUTH_FAILED, "
+            "RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
+        ),
+        annotations=_READ,
+        structured_output=True,
+    )
+    server.add_tool(
+        _guarded(gate, list_comments),
+        name="list_comments",
+        title="Read page comments",
+        description=(
+            "Read a page's comments, oldest first, as plain text (mentions appear as "
+            "@name). Each comment has its author, created_at, whether it is resolved, its "
+            "type (page or inline) and, for inline comments, the page text it refers to "
+            "(selection). Replies have parent_comment_id. Use it before editing a page to see "
+            "open discussions. Page with next_cursor. "
+            + _ERRORS
+            + "NOT_FOUND (missing or in trash), FORBIDDEN, SPACE_NOT_ALLOWED, INVALID_INPUT, "
+            "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
+        ),
+        annotations=_READ,
+        structured_output=True,
+    )
+
+
+class ReplaceConfirmation(BaseModel):
+    confirm: bool = Field(description="Replace the whole page content")
+
+
+class ConfirmationGate(BaseModel):
+    status: Literal["not_needed", "unavailable", "accepted", "declined"]
+
+
+_ELICITATION = ClientCapabilities(elicitation=ElicitationCapability())
+_NOT_NEEDED = ConfirmationGate(status="not_needed")
+
+
+def _confirmation_resolvers(
+    confirm_replace: bool,
+) -> Callable[..., ConfirmationGate]:
+    """Resolver chain asking the user before a replace (elicitation).
+
+    ``ask`` only produces a question when one is needed and the host can show it;
+    ``decide`` turns every outcome (accept, decline, cancel, not asked) into a gate status,
+    so the tool always reports a typed result instead of an aborted call.
+    """
+
+    def need(operation: str | None, ctx: Context) -> str:
+        if not confirm_replace or operation != "replace":
+            return "not_needed"
+        return "ask" if ctx.session.check_client_capability(_ELICITATION) else "unavailable"
+
+    def ask(
+        page_id: str, operation: str | None, ctx: Context
+    ) -> Elicit[ReplaceConfirmation] | AcceptedElicitation[ReplaceConfirmation]:
+        if need(operation, ctx) != "ask":
+            return AcceptedElicitation(data=ReplaceConfirmation(confirm=True))
+        return Elicit(
+            f"Replace the entire content of Docmost page {page_id}? Everything currently on "
+            "the page is deleted, including recent edits by other people.",
+            ReplaceConfirmation,
+        )
+
+    def decide(
+        operation: str | None,
+        ctx: Context,
+        answer: Annotated[ElicitationResult[ReplaceConfirmation], Resolve(ask)],
+    ) -> ConfirmationGate:
+        status = need(operation, ctx)
+        if status != "ask":
+            return ConfirmationGate(status=cast(Any, status))
+        confirmed = isinstance(answer, AcceptedElicitation) and answer.data.confirm
+        return ConfirmationGate(status="accepted" if confirmed else "declined")
+
+    return decide
+
+
+def _register_comment_tool(
+    server: MCPServer[Any], commenter: WikiCommenter, gate: CompatibilityGate
+) -> None:
+    async def add_comment(
+        page_id: Annotated[str, Field(description="Page id or slug id.")],
+        text: Annotated[str, Field(min_length=1, description="Comment text (plain text).")],
+        parent_comment_id: Annotated[
+            OptionalText, Field(description="Reply to this top-level comment id.")
+        ] = "",
+    ) -> CommentItem:
+        comment = await commenter.create_comment(
+            page_id, text, parent_comment_id=parent_comment_id or None
+        )
+        return CommentItem.of(comment)
+
+    server.add_tool(
+        _guarded(gate, add_comment),
+        name="add_comment",
+        title="Comment on a page",
+        description=(
+            "Add a page comment, or a reply to an existing top-level comment, in plain text "
+            "(new lines become paragraphs; formatting and mentions are not supported). Use "
+            "it to propose a change or ask a question instead of editing the page. The page "
+            "watchers are notified. Returns the stored comment. "
+            + _ERRORS
+            + "COMMENTS_DISABLED, FORBIDDEN (the account needs edit access or the space must "
+            "allow viewer comments), NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, "
+            "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
+        ),
+        annotations=_COMMENT,
+        structured_output=True,
+    )
+
 
 def _register_write_tools(
-    server: MCPServer[Any], writer: WikiWriter, gate: CompatibilityGate
+    server: MCPServer[Any], writer: WikiWriter, gate: CompatibilityGate, confirm_replace: bool
 ) -> None:
+    decide = _confirmation_resolvers(confirm_replace)
+
     async def create_page(
         space: Annotated[str, Field(description="Space slug or id to create the page in.")],
         title: Annotated[str, Field(min_length=1, description="Page title.")],
@@ -341,7 +523,20 @@ def _register_write_tools(
         title: Annotated[
             OptionalText, Field(description="New title; empty keeps the current one.")
         ] = "",
+        # Filled by the resolver chain, never by the caller; the default only satisfies
+        # Python's ordering of parameters with defaults.
+        confirmation: Annotated[ConfirmationGate, Resolve(decide)] = _NOT_NEEDED,
     ) -> PageContent:
+        if confirmation.status == "unavailable":
+            raise ConfirmationUnavailableError(
+                "A replace needs the user's confirmation, but this MCP host cannot ask for "
+                "it. Use append or prepend, or have the operator set "
+                "DOCMOST_CONFIRM_REPLACE=0."
+            )
+        if confirmation.status == "declined":
+            raise ConfirmationDeclinedError(
+                "The user did not confirm the replace; nothing was changed."
+            )
         page = await writer.update_page(
             page_id,
             content=_decode(content, format),
@@ -382,9 +577,11 @@ def _register_write_tools(
             "safe with people editing; replace deletes the whole body first, including "
             "recent edits, so use it only when asked to rewrite. To replace a page with "
             "rich content, read it as html and send edited html; markdown would drop "
-            "comments, mentions, colors and diagrams. Returns the page as stored. "
+            "comments, mentions, colors and diagrams. A replace may ask the user to confirm "
+            "first. Returns the page as stored. "
             + _ERRORS
-            + "STALE_PAGE (retryable after re-reading), READ_ONLY, FORBIDDEN (locked or not "
+            + "STALE_PAGE (retryable after re-reading), CONFIRMATION_DECLINED, "
+            "CONFIRMATION_UNAVAILABLE, READ_ONLY, FORBIDDEN (locked or not "
             "editable), NOT_FOUND, SPACE_NOT_ALLOWED, INVALID_INPUT, AUTH_FAILED, "
             "RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
         ),
