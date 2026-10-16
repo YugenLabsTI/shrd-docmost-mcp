@@ -1,0 +1,45 @@
+{
+  "items": [
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000e1", "pageId": "0192b7a4-0000-7000-8000-0000000000c1",
+      "parentCommentId": null, "type": "page", "selection": null,
+      "content": {"type": "doc", "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": "Should we drain first?"}]},
+        {"type": "paragraph", "content": [
+          {"type": "text", "text": "cc "}, {"type": "mention", "attrs": {"id": "u2", "label": "Ana", "entityType": "user"}},
+          {"type": "hardBreak"}, {"type": "text", "text": "thanks", "marks": [{"type": "bold"}]}
+        ]}
+      ]},
+      "creatorId": "0192b7a4-0000-7000-8000-000000000002", "spaceId": "0192b7a4-0000-7000-8000-0000000000b1",
+      "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "lastEditedById": null,
+      "resolvedById": null, "createdAt": "2026-10-16T11:00:00.000Z", "updatedAt": "2026-10-16T11:00:00.000Z",
+      "editedAt": null, "resolvedAt": null, "deletedAt": null,
+      "creator": {"id": "0192b7a4-0000-7000-8000-000000000002", "name": "Ana", "avatarUrl": null},
+      "resolvedBy": null
+    },
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000e2", "pageId": "0192b7a4-0000-7000-8000-0000000000c1",
+      "parentCommentId": "0192b7a4-0000-7000-8000-0000000000e1", "type": "page", "selection": null,
+      "content": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Yes."}]}]},
+      "creatorId": "0192b7a4-0000-7000-8000-000000000003", "spaceId": "0192b7a4-0000-7000-8000-0000000000b1",
+      "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "lastEditedById": null,
+      "resolvedById": "0192b7a4-0000-7000-8000-000000000002", "createdAt": "2026-10-16T11:05:00.000Z",
+      "updatedAt": "2026-10-16T11:05:00.000Z", "editedAt": null, "resolvedAt": "2026-10-16T12:00:00.000Z",
+      "deletedAt": null,
+      "creator": {"id": "0192b7a4-0000-7000-8000-000000000003", "name": "Luis", "avatarUrl": null},
+      "resolvedBy": {"id": "0192b7a4-0000-7000-8000-000000000002", "name": "Ana", "avatarUrl": null}
+    },
+    {
+      "id": "0192b7a4-0000-7000-8000-0000000000e3", "pageId": "0192b7a4-0000-7000-8000-0000000000c1",
+      "parentCommentId": null, "type": "inline", "selection": "worker pool",
+      "content": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Deleted one"}]}]},
+      "creatorId": "0192b7a4-0000-7000-8000-000000000003", "spaceId": "0192b7a4-0000-7000-8000-0000000000b1",
+      "workspaceId": "0192b7a4-0000-7000-8000-0000000000aa", "lastEditedById": null, "resolvedById": null,
+      "createdAt": "2026-10-16T11:10:00.000Z", "updatedAt": "2026-10-16T11:10:00.000Z", "editedAt": null,
+      "resolvedAt": null, "deletedAt": "2026-10-16T11:20:00.000Z",
+      "creator": {"id": "0192b7a4-0000-7000-8000-000000000003", "name": "Luis", "avatarUrl": null},
+      "resolvedBy": null
+    }
+  ],
+  "meta": {"limit": 20, "hasNextPage": false, "hasPrevPage": false, "nextCursor": null, "prevCursor": null}
+}

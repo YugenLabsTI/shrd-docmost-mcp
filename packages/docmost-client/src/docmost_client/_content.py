@@ -59,6 +59,57 @@ def check_content(content: object, format: ContentFormat, max_bytes: int) -> Non
         )
 
 
+_INLINE_NODES = frozenset({"text", "hardBreak", "mention", "emoji"})
+
+
+def comment_document(text: str) -> dict[str, Any]:
+    """Build a comment document from plain text: one paragraph per line.
+
+    Only text nodes are produced, so a comment can never carry a mention (which would
+    notify users) or any other structured node.
+    """
+    paragraphs: list[dict[str, Any]] = []
+    for line in text.strip().split("\n"):
+        paragraph: dict[str, Any] = {"type": "paragraph"}
+        if line:
+            paragraph["content"] = [{"type": "text", "text": line}]
+        paragraphs.append(paragraph)
+    return {"type": "doc", "content": paragraphs}
+
+
+def document_text(node: object) -> str:
+    """Plain text of a ProseMirror document: blocks on separate lines, mentions as @label."""
+    if not isinstance(node, dict):
+        return ""
+    mapping = cast(dict[str, Any], node)
+    kind = mapping.get("type")
+    if kind == "text":
+        return str(mapping.get("text", ""))
+    if kind == "hardBreak":
+        return "\n"
+    if kind == "mention":
+        attrs = mapping.get("attrs")
+        label = cast(dict[str, Any], attrs).get("label") if isinstance(attrs, dict) else None
+        return f"@{label}" if label else "@"
+    children = mapping.get("content")
+    if not isinstance(children, list):
+        return ""
+    items = cast(list[object], children)
+    inline = all(
+        isinstance(child, dict) and cast(dict[str, Any], child).get("type") in _INLINE_NODES
+        for child in items
+    )
+    return ("" if inline else "\n").join(document_text(child) for child in items)
+
+
+def check_size(content: object, max_bytes: int) -> None:
+    size = _encoded_size(content)
+    if size > max_bytes:
+        raise InvalidRequestError(
+            f"content is {size} bytes, over the DOCMOST_MAX_CONTENT_BYTES limit of {max_bytes}."
+        )
+
+
 def _encoded_size(content: object) -> int:
     """Bytes ``content`` occupies in the JSON request body (escapes included)."""
     try:

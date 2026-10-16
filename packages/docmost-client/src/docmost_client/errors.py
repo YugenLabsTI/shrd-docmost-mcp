@@ -94,3 +94,9 @@ class StalePageError(DocmostError):
     def __init__(self, message: str, *, current_updated_at: datetime) -> None:
         super().__init__(message)
         self.current_updated_at = current_updated_at
+
+
+class CommentsDisabledError(DocmostError):
+    """A comment was attempted while DOCMOST_ALLOW_COMMENTS is off (the default)."""
+
+    code: ClassVar[str] = "COMMENTS_DISABLED"

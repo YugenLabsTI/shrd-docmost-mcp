@@ -10,6 +10,7 @@ from typing import Any, Self, TypeVar
 
 from docmost_client import _ops, compat
 from docmost_client.models import (
+    Comment,
     CompatibilityReport,
     ContentFormat,
     ContentOperation,
@@ -122,6 +123,25 @@ class DocmostClient:
     ) -> Paginated[RecentPage]:
         """List recently updated pages, most recent first, optionally in one space."""
         return self._run(_ops.list_recent_pages(self._allowlist, space, limit, cursor))
+
+    def list_comments(
+        self, page_id: str, *, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
+    ) -> Paginated[Comment]:
+        """List a page's comments (oldest first), as plain text. Always allowed."""
+        return self._run(_ops.list_comments(self._allowlist, page_id, limit, cursor))
+
+    def create_comment(
+        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+    ) -> Comment:
+        """Add a page-level comment (or a reply) from plain text.
+
+        Requires DOCMOST_ALLOW_COMMENTS, independently of DOCMOST_READ_ONLY. Docmost
+        lets an account comment when it can edit the page, or when the space allows
+        viewer comments.
+        """
+        return self._run(
+            _ops.create_comment(self._settings, self._allowlist, page_id, text, parent_comment_id)
+        )
 
     def search(
         self,
@@ -286,6 +306,25 @@ class AsyncDocmostClient:
     ) -> Paginated[RecentPage]:
         """List recently updated pages, most recent first, optionally in one space."""
         return await self._run(_ops.list_recent_pages(self._allowlist, space, limit, cursor))
+
+    async def list_comments(
+        self, page_id: str, *, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
+    ) -> Paginated[Comment]:
+        """List a page's comments (oldest first), as plain text. Always allowed."""
+        return await self._run(_ops.list_comments(self._allowlist, page_id, limit, cursor))
+
+    async def create_comment(
+        self, page_id: str, text: str, *, parent_comment_id: str | None = None
+    ) -> Comment:
+        """Add a page-level comment (or a reply) from plain text.
+
+        Requires DOCMOST_ALLOW_COMMENTS, independently of DOCMOST_READ_ONLY. Docmost
+        lets an account comment when it can edit the page, or when the space allows
+        viewer comments.
+        """
+        return await self._run(
+            _ops.create_comment(self._settings, self._allowlist, page_id, text, parent_comment_id)
+        )
 
     async def search(
         self,

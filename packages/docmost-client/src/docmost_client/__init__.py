@@ -5,6 +5,7 @@ from docmost_client.client import AsyncDocmostClient, DocmostClient
 from docmost_client.compat import SUPPORTED_DOCMOST_VERSIONS
 from docmost_client.errors import (
     AuthenticationError,
+    CommentsDisabledError,
     ConfigError,
     DocmostError,
     InvalidRequestError,
@@ -20,6 +21,7 @@ from docmost_client.errors import (
 from docmost_client.models import (
     CONTENT_FORMATS,
     CONTENT_OPERATIONS,
+    Comment,
     CompatibilityReport,
     ContentFormat,
     ContentOperation,
@@ -43,6 +45,8 @@ __all__ = [
     "AsyncDocmostClient",
     "AsyncSession",
     "AuthenticationError",
+    "Comment",
+    "CommentsDisabledError",
     "CompatibilityReport",
     "ConfigError",
     "ContentFormat",
