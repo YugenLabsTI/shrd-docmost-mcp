@@ -1,0 +1,23 @@
+[project]
+name = "yugen-docmost-mcp"
+version = "0.1.0"
+description = "Unofficial, security-first MCP server for self-hosted Docmost Community Edition."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Yugen Labs" }]
+keywords = ["docmost", "wiki", "mcp", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "docmost-client>=0.1.0,<0.2",
+    "mcp>=2.3.0,<3",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12"]
+build-backend = "uv_build"

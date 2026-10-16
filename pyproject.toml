@@ -1,0 +1,55 @@
+[project]
+name = "shrd-docmost-mcp-workspace"
+version = "0"
+description = "Development workspace for docmost-client and yugen-docmost-mcp (not published)."
+requires-python = ">=3.11"
+dependencies = ["docmost-client", "yugen-docmost-mcp"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+docmost-client = { workspace = true }
+yugen-docmost-mcp = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pip-audit>=2.10.1",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "respx>=0.23.1",
+    "ruff>=0.17.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = ["--import-mode=importlib", "--strict-markers", "--strict-config", "-ra"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["packages/docmost-client/src", "packages/yugen-docmost-mcp/src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF", "PT", "ASYNC", "TID", "BLE", "T20", "LOG", "G",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"packages/*/tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.pyright]
+include = ["packages"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = true
+venvPath = "."
+venv = ".venv"
