@@ -111,7 +111,9 @@ HTML and writes the whole page back. Edits someone is typing in the browser are 
 up to ~45 s late and would be lost, so two protections apply:
 
 1. if the page was saved in the last 60 seconds, the call fails with `PAGE_BUSY`
-   (retryable, with `retry_after_seconds`) before anything is asked;
+   (retryable, with `retry_after_seconds`) before anything is asked. The window is
+   measured on Docmost's clock (from the `Date` header of its responses), so a skewed
+   local clock does not shorten it;
 2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
 
 Only top-level headings can be targeted (not headings inside columns, callouts or

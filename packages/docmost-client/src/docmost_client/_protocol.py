@@ -7,6 +7,10 @@ Docmost v0.96.0 conventions (see docs/docmost-api-v0.96.0.md):
 - login returns the JWT only in the ``authToken`` cookie.
 """
 
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from http.cookiejar import Cookie, CookieJar, DefaultCookiePolicy
 from typing import Any, cast
 from urllib.request import Request
@@ -28,6 +32,38 @@ AUTH_COOKIE = "authToken"
 LOGIN_PATH = "/auth/login"
 LOGOUT_PATH = "/auth/logout"
 _MAX_SERVER_MESSAGE = 500
+
+
+class ServerClock:
+    """Docmost's clock, estimated from the ``Date`` header of its latest response.
+
+    The header has one-second resolution and is stamped before the response travels, so
+    the estimate lags slightly behind the server: a busy window measured on it errs
+    toward refusing.
+    """
+
+    def __init__(self, *, monotonic: Callable[[], float] = time.monotonic) -> None:
+        self._monotonic = monotonic
+        self._anchor: tuple[datetime, float] | None = None
+
+    def observe(self, response: httpx.Response) -> None:
+        value = response.headers.get("date")
+        if not value:
+            return
+        try:
+            server = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return
+        if server.tzinfo is None:
+            server = server.replace(tzinfo=UTC)
+        self._anchor = (server, self._monotonic())
+
+    def now(self) -> datetime | None:
+        anchor = self._anchor
+        if anchor is None:
+            return None
+        server, seen_at = anchor
+        return server + timedelta(seconds=self._monotonic() - seen_at)
 
 
 class _RejectAllCookies(DefaultCookiePolicy):
