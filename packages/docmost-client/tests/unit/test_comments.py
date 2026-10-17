@@ -271,3 +271,30 @@ def test_windows_line_endings_become_clean_paragraphs(
 
     paragraphs = json.loads(body(route)["content"])["content"]
     assert [p["content"][0]["text"] for p in paragraphs] == ["first", "second", "third"]
+
+
+def test_comment_prechecks_use_the_lightest_page_read(
+    commenter: DocmostClient, api: respx.MockRouter
+) -> None:
+    api.post(f"{API}/comments").mock(return_value=wrapped(fixture("comments_list")))
+    api.post(f"{API}/comments/create").mock(return_value=wrapped(fixture("comment_create")))
+
+    commenter.list_comments(PAGE_ID)
+    commenter.create_comment(PAGE_ID, "hello")
+
+    formats = [json.loads(call.request.read())["format"] for call in api.routes["page"].calls]
+    assert formats == ["json", "json"]
+
+
+def test_permission_errors_keep_docmost_message(
+    commenter: DocmostClient, api: respx.MockRouter
+) -> None:
+    api.post(f"{API}/comments/create").mock(
+        return_value=httpx.Response(403, json={"message": "Page is locked", "statusCode": 403})
+    )
+
+    with pytest.raises(PermissionDeniedError) as exc:
+        commenter.create_comment(PAGE_ID, "hello")
+
+    assert "Page is locked" in str(exc.value)
+    assert "edit access" in str(exc.value)

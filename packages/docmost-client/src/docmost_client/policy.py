@@ -18,6 +18,13 @@ class SpaceAllowlist:
         return self._entries
 
     @property
+    def single_entry(self) -> str | None:
+        """The only allowed space, when the allowlist names exactly one."""
+        if self._entries is not None and len(self._entries) == 1:
+            return next(iter(self._entries))
+        return None
+
+    @property
     def needs_resolution(self) -> bool:
         return self._entries is not None and self._resolved_ids is None
 
