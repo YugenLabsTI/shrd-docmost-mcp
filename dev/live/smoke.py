@@ -125,7 +125,19 @@ def read_checks(client: DocmostClient, read_space: str, sandbox: str) -> None:
             return "write refused locally (READ_ONLY)"
         raise AssertionError("read-only client accepted a write")
 
+    def recent() -> str:
+        pages = client.list_recent_pages(space=read_space, limit=5).items
+        stamps = [page.updated_at for page in pages]
+        assert stamps == sorted(stamps, reverse=True), "recent pages are not newest first"
+        return f"{len(pages)} recent pages in {read_space}, newest first"
+
+    def comments() -> str:
+        found = client.list_comments(first.id).items
+        return f"{len(found)} comments on the first page"
+
     step("search", search)
+    step("recent pages", recent)
+    step("comments", comments)
     step("read markdown", read("markdown"))
     step("read html", read("html"))
     step("read-only refusal", refused)
@@ -150,6 +162,12 @@ async def mcp_checks(settings: DocmostSettings, read_space: str) -> None:
         print(f"{'ok   ' if ok else 'FAIL '} mcp tools: {sorted(names)}")
         if not ok:
             failures.append("mcp tools")
+        recent = await client.call_tool("list_recent_pages", {"space": read_space, "limit": 5})
+        if recent.is_error:
+            failures.append("mcp list_recent_pages")
+            print(f"FAIL  mcp list_recent_pages: {recent.structured_content}")
+        else:
+            print(f"ok    mcp list_recent_pages: {len(recent.structured_content['pages'])} pages")
         result = await client.call_tool("list_children", {"space": read_space})
         if result.is_error:
             failures.append("mcp list_children")

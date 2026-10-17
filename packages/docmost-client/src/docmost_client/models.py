@@ -156,7 +156,10 @@ class SearchResults(BaseModel):
 
 
 def _comment_text(content: object) -> str:
+    # Imported here because _content imports models (avoids a circular import).
     from docmost_client._content import document_text
+
+    # Docmost stores comment content as JSON; an unparseable string is shown as is.
 
     if isinstance(content, str):
         try:

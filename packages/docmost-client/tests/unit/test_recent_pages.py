@@ -94,7 +94,7 @@ def test_recent_pages_of_one_space_by_slug(client: DocmostClient, api: respx.Moc
 def test_recent_pages_respect_the_allowlist(api: respx.MockRouter) -> None:
     api.post(f"{API}/pages/recent").mock(return_value=wrapped(fixture("recent_pages")))
 
-    with DocmostClient(settings(DOCMOST_ALLOWED_SPACES="engineering")) as client:
+    with DocmostClient(settings(DOCMOST_ALLOWED_SPACES="engineering,sandbox")) as client:
         result = client.list_recent_pages()
 
     assert [page.space.slug for page in result.items] == ["engineering"]
@@ -134,3 +134,13 @@ async def test_async_client_lists_recent_pages(api: respx.MockRouter) -> None:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+def test_a_single_allowed_space_scopes_the_request(api: respx.MockRouter) -> None:
+    route = api.post(f"{API}/pages/recent").mock(return_value=wrapped(fixture("recent_pages")))
+
+    with DocmostClient(settings(DOCMOST_ALLOWED_SPACES="engineering")) as client:
+        client.list_recent_pages()
+
+    # Asking Docmost for that space avoids pages emptied by allowlist filtering.
+    assert body(route) == {"spaceId": ENG_ID, "limit": 20}

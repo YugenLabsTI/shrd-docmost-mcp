@@ -55,6 +55,8 @@ _READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 _CREATE = ToolAnnotations(
     read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
 )
+# Same values as _CREATE today; kept separate because comments are a distinct permission
+# (DOCMOST_ALLOW_COMMENTS) whose hints may diverge from page creation.
 _COMMENT = ToolAnnotations(
     read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
 )
@@ -392,7 +394,8 @@ def _register_read_tools(
 
 
 class ReplaceConfirmation(BaseModel):
-    confirm: bool = Field(description="Replace the whole page content")
+    # Defaults to False: an accepted answer without a value counts as "not confirmed".
+    confirm: bool = Field(default=False, description="Replace the whole page content")
 
 
 Need = Literal["not_needed", "unavailable", "ask"]
@@ -431,7 +434,8 @@ def _confirmation_resolvers(
             # user confirmation.
             return AcceptedElicitation(data=ReplaceConfirmation(confirm=True))
         return Elicit(
-            f"Replace the entire content of Docmost page {page_id}? Everything currently on "
+            f"Replace the entire content of Docmost page {_quoted(page_id)}? Everything "
+            "currently on "
             "the page is deleted, including recent edits by other people.",
             ReplaceConfirmation,
         )
@@ -449,6 +453,12 @@ def _confirmation_resolvers(
         return ConfirmationGate(status="accepted" if confirmed else "declined")
 
     return decide
+
+
+def _quoted(value: str, limit: int = 60) -> str:
+    """Show agent-supplied text safely inside a question to the user: one line, bounded."""
+    flat = " ".join("".join(ch if ch.isprintable() else " " for ch in value).split())
+    return f'"{flat if len(flat) <= limit else flat[: limit - 1] + "…"}"'
 
 
 def _register_comment_tool(

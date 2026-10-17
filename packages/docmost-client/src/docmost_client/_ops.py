@@ -184,6 +184,9 @@ def list_recent_pages(
     allowlist: SpaceAllowlist, space: str | None, limit: int, cursor: str | None
 ) -> Op[Paginated[RecentPage]]:
     payload = _pagination(limit, cursor)
+    # With a single allowed space, ask Docmost for that space directly: filtering a
+    # workspace-wide feed would return short or empty pages.
+    space = space or allowlist.single_entry
     if space:
         payload["spaceId"] = yield from resolve_space_id(allowlist, space)
     data = yield ("/pages/recent", payload)
@@ -196,8 +199,7 @@ def list_comments(
     allowlist: SpaceAllowlist, page_id: str, limit: int, cursor: str | None
 ) -> Op[Paginated[Comment]]:
     payload = _pagination(limit, cursor)
-    # Checks the page first: allowlist, trash, and its UUID.
-    page = yield from get_page(allowlist, page_id, "markdown")
+    page = yield from _checked_page(allowlist, page_id)
     data = yield ("/comments", {"pageId": page.id, **payload})
     comments = _paginated(Comment, data)
     visible = [comment for comment in comments.items if comment.deleted_at is None]
@@ -222,19 +224,29 @@ def create_comment(
     document = json.dumps(comment_document(text), ensure_ascii=False, separators=(",", ":"))
     check_size(document, settings.max_content_bytes)
 
-    page = yield from get_page(allowlist, page_id, "markdown")
+    page = yield from _checked_page(allowlist, page_id)
     payload: dict[str, Any] = {"pageId": page.id, "content": document, "type": "page"}
     if parent_comment_id is not None:
         payload["parentCommentId"] = parent_comment_id
     try:
         data = yield ("/comments/create", payload)
-    except PermissionDeniedError:
+    except PermissionDeniedError as exc:
         raise PermissionDeniedError(
-            "The account cannot comment on this page: it needs edit access there (letting "
-            "readers comment is a Docmost Enterprise feature).",
-            status_code=403,
+            f"{exc} The account cannot comment on this page: it needs edit access there "
+            "(letting readers comment is a Docmost Enterprise feature).",
+            status_code=exc.status_code,
         ) from None
     return _parse(Comment, _object(data))
+
+
+def _checked_page(allowlist: SpaceAllowlist, page_id: str) -> Op[Page]:
+    """Precheck a page (allowlist, trash, UUID) before acting on its comments.
+
+    Docmost always returns the page content; the json format is the cheapest because the
+    server returns the stored document without converting it.
+    """
+    page = yield from get_page(allowlist, page_id, "json")
+    return page
 
 
 def search(
