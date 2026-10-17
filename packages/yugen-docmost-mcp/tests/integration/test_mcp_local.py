@@ -241,3 +241,33 @@ async def test_resources_and_prompts_over_mcp() -> None:
     assert f"{title} ({slug}) in sandbox" in recent.contents[0].text  # type: ignore[union-attr]
     assert prompts == {"summarize_page", "answer_from_wiki"}
     assert slug in summary.messages[0].content.text  # type: ignore[union-attr]
+
+
+async def test_move_page_over_mcp() -> None:
+    tag = uuid.uuid4().hex[:8]
+    server = create_server(
+        settings(DOCMOST_READ_ONLY="0", DOCMOST_ALLOW_MOVE="1", DOCMOST_ALLOWED_SPACES="sandbox")
+    )
+    async with Client(server) as client:
+        parent = await client.call_tool(
+            "create_page", {"space": "sandbox", "title": f"MCP move parent {tag}"}
+        )
+        page = await client.call_tool("create_page", {"space": "sandbox", "title": f"MCP X {tag}"})
+        read = await client.call_tool("get_page", {"page_id": page.structured_content["id"]})
+        moved = await client.call_tool(
+            "move_page",
+            {
+                "page_id": page.structured_content["id"],
+                "parent_page_id": parent.structured_content["slug_id"],
+                "expected_updated_at": read.structured_content["updated_at"],
+            },
+        )
+        children = await client.call_tool(
+            "list_children", {"parent_page_id": parent.structured_content["id"]}
+        )
+
+    assert moved.is_error is False, moved.structured_content
+    assert moved.structured_content["parent_page_id"] == parent.structured_content["id"]
+    assert [p["id"] for p in children.structured_content["pages"]] == [
+        page.structured_content["id"]
+    ]

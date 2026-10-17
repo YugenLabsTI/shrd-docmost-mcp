@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Moving pages
+
+- `move_page` (behind `DOCMOST_ALLOW_MOVE`, off by default, on top of
+  `DOCMOST_READ_ONLY=0`) moves a page under another parent or to the space root and
+  places it after a sibling, first or last; new error code `MOVE_DISABLED`.
+- Client: `move_page`, `MoveDisabledError`, `DocmostSettings.allow_move`; `Page` and
+  `PageSummary` expose `position`.
+
 ### Fixed
 
 - The `docmost://space/{space}/tree` resource keeps the pages it already fetched when its

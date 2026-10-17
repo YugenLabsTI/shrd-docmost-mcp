@@ -15,6 +15,7 @@ from docmost_client import (
     ContentFormat,
     ContentOperation,
     Heading,
+    MoveDisabledError,
     Page,
     PageOutline,
     PageSummary,
@@ -189,6 +190,25 @@ class FakeWiki:
             creator_name="Wiki Bot",
             created_at=UPDATED_AT,
         )
+
+    async def move_page(
+        self,
+        page_id: str,
+        *,
+        parent_page_id: str | None,
+        after_page_id: str | None,
+        placement: str,
+        expected_updated_at: datetime,
+    ) -> Page:
+        self._record(
+            "move_page",
+            page_id=page_id,
+            parent_page_id=parent_page_id,
+            after_page_id=after_page_id,
+            placement=placement,
+            expected_updated_at=expected_updated_at,
+        )
+        return make_page()
 
     def busy_retry_after(self, updated_at: datetime) -> int | None:
         return docmost_client.busy_retry_after(updated_at, self.server_time)
@@ -1104,3 +1124,66 @@ async def test_space_tree_stops_at_two_hundred_pages() -> None:
     assert "Page 199" in text
     assert "Page 200" not in text
     assert text.rstrip().endswith("(truncated: the tree is larger than this view)")
+
+
+# --- move_page ---------------------------------------------------------------------
+
+MOVE = {
+    "page_id": "abc123xyz0",
+    "parent_page_id": "guide00001",
+    "expected_updated_at": "2026-10-16T10:00:00Z",
+}
+
+
+async def test_move_page_exists_only_with_a_mover(wiki: FakeWiki) -> None:
+    async with Client(build_server(wiki, writer=wiki)) as client:
+        without = {t.name for t in (await client.list_tools()).tools}
+    async with Client(build_server(wiki, writer=wiki, mover=wiki)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        instructions = client.instructions or ""
+
+    assert "move_page" not in without
+    assert "move_page" in tools
+    assert tools["move_page"].annotations.destructive_hint is False  # type: ignore[union-attr]
+    assert "move_page" in instructions
+
+
+async def test_move_page_passes_the_placement_to_the_client(wiki: FakeWiki) -> None:
+    result = await call(
+        build_server(wiki, writer=wiki, mover=wiki), "move_page", **MOVE, after_page_id="c-1"
+    )
+
+    assert result.is_error is False
+    assert result.structured_content["id"] == "p1"
+    name, kwargs = wiki.calls[-1]
+    assert name == "move_page"
+    assert kwargs == {
+        "page_id": "abc123xyz0",
+        "parent_page_id": "guide00001",
+        "after_page_id": "c-1",
+        "placement": "end",
+        "expected_updated_at": UPDATED_AT,
+    }
+
+
+async def test_an_empty_parent_moves_to_the_root(wiki: FakeWiki) -> None:
+    await call(
+        build_server(wiki, writer=wiki, mover=wiki),
+        "move_page",
+        **(MOVE | {"parent_page_id": ""}),
+        placement="start",
+    )
+
+    _, kwargs = wiki.calls[-1]
+    assert kwargs["parent_page_id"] is None
+    assert kwargs["after_page_id"] is None
+    assert kwargs["placement"] == "start"
+
+
+async def test_move_page_errors_are_typed(wiki: FakeWiki) -> None:
+    wiki.fail_with = MoveDisabledError("Moving pages is disabled; set DOCMOST_ALLOW_MOVE=1.")
+
+    result = await call(build_server(wiki, writer=wiki, mover=wiki), "move_page", **MOVE)
+
+    assert result.structured_content["error"]["code"] == "MOVE_DISABLED"
+    assert result.structured_content["error"]["retryable"] is False

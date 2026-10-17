@@ -222,3 +222,18 @@ def test_the_example_prompts_are_valid() -> None:
     examples = Path(__file__).parents[3] / "examples" / "prompts"
 
     assert [p.name for p in load_prompt_dir(examples)] == ["weekly_report"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("read_only", "allow_move", "has_move"),
+    [("1", "1", False), ("0", "0", False), ("0", "1", True)],
+)
+async def test_move_page_needs_writes_and_its_flag(
+    read_only: str, allow_move: str, has_move: bool
+) -> None:
+    server = create_server(settings(DOCMOST_READ_ONLY=read_only, DOCMOST_ALLOW_MOVE=allow_move))
+    async with Client(server) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+
+    assert ("move_page" in names) is has_move
