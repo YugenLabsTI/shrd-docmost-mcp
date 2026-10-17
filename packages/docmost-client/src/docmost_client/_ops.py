@@ -408,6 +408,14 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def busy_retry_after(updated_at: datetime) -> int | None:
+    """Seconds to wait before a whole-page rewrite, or None when the page is quiet."""
+    age = _utcnow() - updated_at
+    if age >= BUSY_WINDOW:
+        return None
+    return int((BUSY_WINDOW - age).total_seconds()) + 1
+
+
 def edit_section(
     settings: DocmostSettings,
     allowlist: SpaceAllowlist,
@@ -442,14 +450,9 @@ def edit_section(
             "Read the outline again and reapply the change.",
             current_updated_at=current.updated_at,
         )
-    age = _utcnow() - current.updated_at
-    if age < BUSY_WINDOW:
-        wait = int((BUSY_WINDOW - age).total_seconds()) + 1
-        raise PageBusyError(
-            f"The page was saved {int(age.total_seconds())} seconds ago and may be open in "
-            f"someone's editor. Try again in about {wait} seconds.",
-            retry_after_seconds=wait,
-        )
+    wait = busy_retry_after(current.updated_at)
+    if wait is not None:
+        raise page_busy(wait)
 
     html = current.content if isinstance(current.content, str) else ""
     new_html = splice_section(html, heading_id, operation, content)
@@ -459,6 +462,14 @@ def edit_section(
         {"pageId": current.id, "content": new_html, "operation": "replace", "format": "html"},
     )
     return _parse(Page, {**_object(data), "format": "html"})
+
+
+def page_busy(wait: int) -> PageBusyError:
+    return PageBusyError(
+        "The page was saved less than a minute ago and may be open in someone's editor "
+        f"with unsaved changes. Try again in about {wait} seconds.",
+        retry_after_seconds=wait,
+    )
 
 
 def _require_writable(settings: DocmostSettings) -> None:
