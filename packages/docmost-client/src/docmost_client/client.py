@@ -247,6 +247,33 @@ class DocmostClient:
             )
         )
 
+    def move_page(
+        self,
+        page_id: str,
+        *,
+        parent_page_id: str | None,
+        after_page_id: str | None = None,
+        placement: _ops.MovePlacement = "end",
+        expected_updated_at: datetime,
+    ) -> Page:
+        """Move a page under ``parent_page_id`` (None: the space root), within its space.
+
+        It goes right after ``after_page_id`` when given, else first or last
+        (``placement``). Needs DOCMOST_ALLOW_MOVE as well as writes; refuses stale pages.
+        Returns the page as read after the move.
+        """
+        return self._run(
+            _ops.move_page(
+                self._settings,
+                self._allowlist,
+                page_id,
+                parent_page_id=parent_page_id,
+                after_page_id=after_page_id,
+                placement=placement,
+                expected_updated_at=expected_updated_at,
+            )
+        )
+
     def server_now(self) -> datetime:
         """Docmost's current time, estimated from its latest response; else the local clock."""
         return self._session.server_now() or _ops._utcnow()  # pyright: ignore[reportPrivateUsage]
@@ -475,6 +502,33 @@ class AsyncDocmostClient:
 
     async def _run(self, op: _ops.Op[T]) -> T:
         return await _ops.drive_async(op, self._call)
+
+    async def move_page(
+        self,
+        page_id: str,
+        *,
+        parent_page_id: str | None,
+        after_page_id: str | None = None,
+        placement: _ops.MovePlacement = "end",
+        expected_updated_at: datetime,
+    ) -> Page:
+        """Move a page under ``parent_page_id`` (None: the space root), within its space.
+
+        It goes right after ``after_page_id`` when given, else first or last
+        (``placement``). Needs DOCMOST_ALLOW_MOVE as well as writes; refuses stale pages.
+        Returns the page as read after the move.
+        """
+        return await self._run(
+            _ops.move_page(
+                self._settings,
+                self._allowlist,
+                page_id,
+                parent_page_id=parent_page_id,
+                after_page_id=after_page_id,
+                placement=placement,
+                expected_updated_at=expected_updated_at,
+            )
+        )
 
     def server_now(self) -> datetime:
         """Docmost's current time, estimated from its latest response; else the local clock."""
