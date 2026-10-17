@@ -118,8 +118,10 @@ Only top-level headings can be targeted (not headings inside columns, callouts o
 collapsible blocks). New content must be well-formed HTML: every element closed and
 nested correctly, `<` written as `&lt;` in text, and no comments, `<!...>`/`<?...?>`
 constructs or self-closed non-void elements such as `<div/>` (Docmost's parser would let
-them swallow the rest of the page). Mentions follow the same rule as `update_page`
-(see below).
+them swallow the rest of the page), and no `script`, `style`, `iframe`, `textarea` or
+other raw-text elements. New headings cannot reuse an id another heading on the page
+already has; leave `data-id`/`id` off new headings and Docmost assigns fresh ones.
+Mentions follow the same rule as `update_page` (see below).
 
 ## MCP tools
 
