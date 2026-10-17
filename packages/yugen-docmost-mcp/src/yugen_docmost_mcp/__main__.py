@@ -1,9 +1,14 @@
 """Command-line entry point: ``yugen-docmost-mcp`` serves MCP over stdio."""
 
+import argparse
+import dataclasses
+import json
 import logging
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -11,7 +16,14 @@ from mcp.server.mcpserver import MCPServer
 from docmost_client import AsyncDocmostClient, ConfigError, DocmostSettings
 from docmost_client.settings import env_flag
 from yugen_docmost_mcp._version import __version__
-from yugen_docmost_mcp.audit import AuditLog, audit_settings_from_env
+from yugen_docmost_mcp.audit import (
+    AuditLog,
+    audit_settings_from_env,
+    parse_since,
+    read_events,
+    render_report,
+    summarize,
+)
 from yugen_docmost_mcp.prompts import BUILTIN_PROMPTS, PromptSpec, prompts_from_env
 from yugen_docmost_mcp.server import build_server
 
@@ -50,6 +62,8 @@ def create_server(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = sys.argv[1:] if argv is None else list(argv)
+    if args[:1] == ["audit"]:
+        raise SystemExit(audit_command(args[1:]))
     if "--version" in args:
         sys.stdout.write(f"yugen-docmost-mcp {__version__}\n")
         raise SystemExit(0)
@@ -72,6 +86,37 @@ def main(argv: Sequence[str] | None = None) -> None:
     create_server(settings, confirm_replace=confirm_replace, prompts=prompts, audit=audit).run(
         "stdio"
     )
+
+
+def audit_command(argv: Sequence[str]) -> int:
+    """``audit report``: summarize the audit log for the operator (exit 2 on errors)."""
+    parser = argparse.ArgumentParser(prog="yugen-docmost-mcp audit")
+    commands = parser.add_subparsers(dest="command", required=True)
+    report = commands.add_parser("report", help="Summarize the audit log.")
+    report.add_argument("--file", help="Audit log file (default: DOCMOST_AUDIT_LOG).")
+    report.add_argument("--since", help="Only the last 30m, 24h, 7d, ...")
+    report.add_argument("--json", action="store_true", help="Print the summary as JSON.")
+    options = parser.parse_args(list(argv))
+
+    raw = options.file or os.environ.get("DOCMOST_AUDIT_LOG", "").strip()
+    if not raw:
+        parser.error("no audit log: pass --file or set DOCMOST_AUDIT_LOG.")
+    since = None
+    if options.since:
+        try:
+            since = parse_since(options.since, datetime.now(UTC))
+        except ValueError:
+            parser.error("--since must look like 30m, 24h or 7d.")
+    path = Path(raw)
+    try:
+        summary = summarize(read_events(path, since))
+    except OSError:
+        parser.error(f"the audit log {path} cannot be read.")
+    if options.json:
+        sys.stdout.write(json.dumps(dataclasses.asdict(summary), indent=2) + "\n")
+    else:
+        sys.stdout.write(render_report(summary, str(path)))
+    return 0
 
 
 if __name__ == "__main__":
