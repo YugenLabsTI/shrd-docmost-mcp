@@ -115,8 +115,9 @@ up to ~45 s late and would be lost, so two protections apply:
    call fails with `PAGE_BUSY` (retryable, with `retry_after_seconds`) before anything
    is asked. The window is measured on the earlier of Docmost's clock (from the `Date`
    header of its successful responses) and the local one, so a small skew on either
-   side cannot shorten it; when the two differ by more than 5 minutes, one of them is
-   misconfigured and the local clock is used;
+   side cannot shorten it. Time zones do not matter (both are absolute instants); when
+   the two clocks differ by more than 5 minutes one of them is wrong, and section edits
+   fail with `CLOCK_SKEW` until an operator fixes the time synchronization;
 2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
 
 The window only sees edits Docmost has already saved. Someone typing right now on a page
@@ -153,7 +154,7 @@ Failures return `is_error: true` with
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
 `READ_ONLY`, `COMMENTS_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
-`PAGE_BUSY`,
+`PAGE_BUSY`, `CLOCK_SKEW`,
 `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
 `UNSUPPORTED_VERSION`. Invalid configuration stops the server at startup with a message

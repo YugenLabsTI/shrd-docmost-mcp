@@ -552,9 +552,9 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
     async def check(page_id: str, ctx: Context) -> SectionCheck:
         try:
             outline = await reader.get_page_outline(page_id)
+            wait = reader.busy_retry_after(outline.updated_at)
         except DocmostError as exc:
             return SectionCheck(status="precheck_failed", error=exc)
-        wait = reader.busy_retry_after(outline.updated_at)
         if wait is not None:
             return SectionCheck(status="busy", retry_after=wait)
         if not confirm_replace:
@@ -745,7 +745,8 @@ def _register_write_tools(
             "PAGE_BUSY (wait retry_after_seconds and retry), and otherwise the user may be "
             "asked to confirm. Returns the page as stored (html). "
             + _ERRORS
-            + "PAGE_BUSY (retryable), STALE_PAGE (retryable after re-reading), "
+            + "PAGE_BUSY (retryable), STALE_PAGE (retryable after re-reading), CLOCK_SKEW "
+            "(Docmost's and the local clock disagree; an operator must fix them), "
             "CONFIRMATION_DECLINED, CONFIRMATION_UNAVAILABLE, NOT_FOUND (page or heading), "
             "READ_ONLY, FORBIDDEN, SPACE_NOT_ALLOWED, INVALID_INPUT, AUTH_FAILED, "
             "RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."

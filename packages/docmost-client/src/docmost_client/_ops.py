@@ -25,6 +25,7 @@ from docmost_client._content import (
 )
 from docmost_client._sections import SECTION_OPERATIONS, SectionOperation, splice_section
 from docmost_client.errors import (
+    ClockSkewError,
     CommentsDisabledError,
     DocmostError,
     InvalidRequestError,
@@ -54,7 +55,7 @@ from docmost_client.models import (
     Space,
 )
 from docmost_client.policy import SpaceAllowlist
-from docmost_client.settings import DocmostSettings
+from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS, DocmostSettings
 
 T = TypeVar("T")
 M = TypeVar("M", Space, PageSummary, RecentPage, Comment)
@@ -412,10 +413,9 @@ def update_page(
 
 # Docmost persists editor changes up to ~45 s late; a page saved within this window may
 # be open in someone's editor with unsaved edits that a whole-page rewrite would discard.
-# The default of DOCMOST_BUSY_WINDOW_SECONDS.
-BUSY_WINDOW = timedelta(seconds=60)
-# Docmost's clock is trusted only this close to the local one; beyond that, one of them
-# is wrong (a misconfigured host or proxy) and the local clock is used.
+BUSY_WINDOW = timedelta(seconds=DEFAULT_BUSY_WINDOW_SECONDS)
+# Beyond this, Docmost's clock or the local one is wrong (a misconfigured host or proxy;
+# time zones do not matter, both are absolute instants) and section edits are refused.
 MAX_CLOCK_SKEW = timedelta(minutes=5)
 
 
@@ -428,13 +428,23 @@ def busy_retry_after(
 ) -> int | None:
     """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
 
-    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). Within
-    MAX_CLOCK_SKEW of the local clock the earlier of the two is used, so a small skew on
-    either side only lengthens the window; beyond it the local clock is used.
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of
+    it and the local clock is used, so a small skew on either side only lengthens the
+    window. Raises ClockSkewError when the two differ by more than MAX_CLOCK_SKEW.
     """
     local = _utcnow()
-    skewed = now is None or abs(now - local) > MAX_CLOCK_SKEW
-    current = local if skewed or now is None else min(now, local)
+    current = local
+    if now is not None:
+        skew = abs(now - local)
+        if skew > MAX_CLOCK_SKEW:
+            minutes = round(skew.total_seconds() / 60)
+            raise ClockSkewError(
+                f"Docmost's clock and this machine's clock differ by about {minutes} "
+                "minutes, so the client cannot tell whether the page was saved moments ago. "
+                "Section edits are refused until the clocks agree: check time "
+                "synchronization (NTP) on both hosts and the Date header of any proxy."
+            )
+        current = min(now, local)
     age = current - updated_at
     if age >= window:
         return None

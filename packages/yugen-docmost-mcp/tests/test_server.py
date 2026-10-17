@@ -921,3 +921,17 @@ async def test_the_busy_check_before_asking_uses_docmost_s_clock(
     assert result.structured_content["error"]["code"] == "PAGE_BUSY"
     assert result.structured_content["error"]["retry_after_seconds"] == 41
     assert accept.asked == []
+
+
+async def test_skewed_clocks_refuse_a_section_edit_before_asking(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    wiki.server_time = UPDATED_AT - timedelta(days=365)
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    error = result.structured_content["error"]
+    assert error["code"] == "CLOCK_SKEW"
+    assert error["retryable"] is False
+    assert accept.asked == []
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
