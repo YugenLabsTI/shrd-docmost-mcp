@@ -19,6 +19,7 @@ from docmost_client import (
     PageBusyError,
     UnsupportedVersionError,
 )
+from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
 from yugen_docmost_mcp.ports import WikiCommenter, WikiReader, WikiWriter
@@ -624,13 +625,8 @@ def _register_write_tools(
     ) -> PageContent:
         if section_gate.error is not None:
             raise section_gate.error
-        if section_gate.status == "busy":
-            wait = section_gate.retry_after or 60
-            raise PageBusyError(
-                "The page was saved too recently and may be open in someone's "
-                f"editor with unsaved changes. Try again in about {wait} seconds.",
-                retry_after_seconds=wait,
-            )
+        if section_gate.status == "busy" and section_gate.retry_after is not None:
+            raise PageBusyError.after(section_gate.retry_after)
         if section_gate.status == "unavailable":
             raise ConfirmationUnavailableError(
                 "A section edit needs the user's confirmation, but this MCP host cannot ask "
@@ -745,8 +741,8 @@ def _register_write_tools(
             "inserts at the end of the section. content is HTML (e.g. <p>, <ul>, <table>); "
             "it must be well-formed and may keep mentions already on the page but not add "
             "new ones (they notify people). Docmost can only save whole "
-            "pages, so if the page was saved very recently (DOCMOST_BUSY_WINDOW_SECONDS, 60 "
-            "by default) the call fails with "
+            "pages, so if the page was saved very recently (DOCMOST_BUSY_WINDOW_SECONDS, "
+            f"{DEFAULT_BUSY_WINDOW_SECONDS} by default) the call fails with "
             "PAGE_BUSY (wait retry_after_seconds and retry), and otherwise the user may be "
             "asked to confirm. Returns the page as stored (html). "
             + _ERRORS

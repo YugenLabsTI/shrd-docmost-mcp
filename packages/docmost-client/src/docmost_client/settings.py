@@ -197,12 +197,14 @@ def _busy_window(env: Mapping[str, str]) -> int:
         return DEFAULT_BUSY_WINDOW_SECONDS
     error = ConfigError(
         f"{name} must be a whole number of seconds from {MIN_BUSY_WINDOW_SECONDS} to "
-        f"{MAX_BUSY_WINDOW_SECONDS}; Docmost saves editor changes up to ~45 seconds late."
+        f"{MAX_BUSY_WINDOW_SECONDS}; Docmost saves editor changes up to "
+        f"~{MIN_BUSY_WINDOW_SECONDS} seconds late."
     )
-    try:
-        value = int(raw)
-    except ValueError:
-        raise error from None
+    digits = raw.strip()
+    # int() would also take "+90", "1_000" or non-ASCII digits.
+    if not (digits.isascii() and digits.isdigit()):
+        raise error
+    value = int(digits)
     if not MIN_BUSY_WINDOW_SECONDS <= value <= MAX_BUSY_WINDOW_SECONDS:
         raise error
     return value

@@ -270,14 +270,14 @@ def test_busy_window_defaults_to_sixty_seconds() -> None:
     assert DocmostSettings.from_env(env()).busy_window_seconds == 60
 
 
-@pytest.mark.parametrize("raw", ["45", "90", "86400"])
+@pytest.mark.parametrize("raw", ["45", "90", " 120 ", "86400"])
 def test_busy_window_is_configurable(raw: str) -> None:
     settings = DocmostSettings.from_env(env(DOCMOST_BUSY_WINDOW_SECONDS=raw))
 
-    assert settings.busy_window_seconds == int(raw)
+    assert settings.busy_window_seconds == int(raw.strip())
 
 
-@pytest.mark.parametrize("raw", ["44", "0", "-5", "abc", "60.5", "86401"])
+@pytest.mark.parametrize("raw", ["44", "0", "-5", "abc", "60.5", "86401", "+90", "1_000", "٤٥"])
 def test_busy_window_below_docmost_s_save_delay_is_refused(raw: str) -> None:
     with pytest.raises(ConfigError, match="DOCMOST_BUSY_WINDOW_SECONDS"):
         DocmostSettings.from_env(env(DOCMOST_BUSY_WINDOW_SECONDS=raw))

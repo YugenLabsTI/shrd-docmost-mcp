@@ -124,3 +124,12 @@ class PageBusyError(DocmostError):
     def __init__(self, message: str, *, retry_after_seconds: int) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+    @classmethod
+    def after(cls, seconds: int) -> "PageBusyError":
+        """The standard error for a page that may be rewritten in ``seconds``."""
+        return cls(
+            "The page was saved too recently and may be open in someone's editor with "
+            f"unsaved changes. Try again in about {seconds} seconds.",
+            retry_after_seconds=seconds,
+        )

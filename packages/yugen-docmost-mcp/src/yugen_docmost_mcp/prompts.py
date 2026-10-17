@@ -60,6 +60,8 @@ class PromptSpec:
     title: str | None = None
     description: str | None = None
     arguments: tuple[PromptArgumentSpec, ...] = ()
+    # Where it was defined (a file name, or "built-in"), for error messages.
+    source: str = "built-in"
 
     def render(self, values: Mapping[str, object]) -> str:
         declared = {argument.name: argument for argument in self.arguments}
@@ -116,6 +118,7 @@ def parse_prompt(data: Mapping[str, Any], source: str) -> PromptSpec:
         title=title,
         description=description,
         arguments=tuple(arguments),
+        source=source,
     )
 
 
@@ -250,14 +253,15 @@ def prompts_from_env(environ: Mapping[str, str] | None = None) -> list[PromptSpe
     for prompt in load_prompt_dir(directory):
         if prompt.name in names:
             raise ConfigError(
-                f"The prompt {prompt.name!r} in DOCMOST_PROMPTS_DIR has the name of a built-in "
-                "prompt; rename it, or set DOCMOST_BUILTIN_PROMPTS=0 to replace the built-ins."
+                f"The prompt {prompt.name!r} in DOCMOST_PROMPTS_DIR ({prompt.source}) has the "
+                "name of a built-in prompt; rename it, or set DOCMOST_BUILTIN_PROMPTS=0 to "
+                "replace the built-ins."
             )
         prompts.append(prompt)
     return prompts
 
 
-class _FilePrompt(Prompt):
+class _CheckedPrompt(Prompt):
     async def render(  # type: ignore[override]
         self, arguments: dict[str, Any] | None, context: Context[Any, Any]
     ) -> Any:
@@ -278,7 +282,7 @@ class _FilePrompt(Prompt):
 def register_prompts(server: MCPServer[Any], prompts: Sequence[PromptSpec]) -> None:
     for spec in prompts:
         server.add_prompt(
-            _FilePrompt(
+            _CheckedPrompt(
                 name=spec.name,
                 title=spec.title,
                 description=spec.description,
