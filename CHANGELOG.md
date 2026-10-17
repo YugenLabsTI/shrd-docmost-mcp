@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### License
+
+- Both packages are licensed under the Apache License 2.0; the license file ships in
+  each wheel and source distribution.
+
 ### Audit log
 
 - `DOCMOST_AUDIT_LOG` records every write, comment, move and refused attempt (and reads
