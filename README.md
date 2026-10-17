@@ -170,6 +170,19 @@ on stderr.
 
 Details and evidence: [docs/docmost-api-v0.96.0.md](docs/docmost-api-v0.96.0.md#5-content-formats-s5).
 
+## MCP resources
+
+Hosts can attach these as context without a tool call. They are read-only, exist in
+read-only mode too, and respect `DOCMOST_ALLOWED_SPACES`.
+
+| URI | Content |
+|-----|---------|
+| `docmost://page/{page_id}` | The page as markdown, after its title, ids and last update. `page_id` is the UUID or slug id. |
+| `docmost://space/{space}/tree` | The space's page hierarchy (slug or id) as a nested list of titles and slug ids; at most 200 pages, marked when truncated. |
+| `docmost://recent` | The 50 most recently updated pages in the allowed spaces. |
+
+A failed read returns the same error codes as the tools (for example `SPACE_NOT_ALLOWED`).
+
 ## Security model
 
 Two independent barriers protect the wiki: the Docmost account's own permissions, and

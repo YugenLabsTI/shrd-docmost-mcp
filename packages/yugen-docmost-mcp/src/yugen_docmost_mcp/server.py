@@ -22,6 +22,7 @@ from docmost_client import (
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
 from yugen_docmost_mcp.ports import WikiCommenter, WikiReader, WikiWriter
+from yugen_docmost_mcp.resources import register_resources
 from yugen_docmost_mcp.results import (
     ChildItem,
     ChildrenResult,
@@ -184,6 +185,7 @@ def build_server(
     )
     gate = CompatibilityGate(reader)
     _register_read_tools(server, reader, gate)
+    register_resources(server, reader, gate.ensure)
     if commenter is not None:
         _register_comment_tool(server, commenter, gate)
     if writer is not None:
