@@ -3,6 +3,8 @@
 import functools
 import json
 import logging
+import time
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, ParamSpec, TypeVar, cast
@@ -21,6 +23,7 @@ from docmost_client import (
 )
 from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS
 from yugen_docmost_mcp._version import __version__
+from yugen_docmost_mcp.audit import WRITE_TOOLS, AuditLog
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
 from yugen_docmost_mcp.ports import WikiCommenter, WikiMover, WikiReader, WikiWriter
 from yugen_docmost_mcp.prompts import BUILTIN_PROMPTS, PromptSpec, register_prompts
@@ -163,6 +166,7 @@ def build_server(
     *,
     commenter: WikiCommenter | None = None,
     mover: WikiMover | None = None,
+    audit: AuditLog | None = None,
     confirm_replace: bool = True,
     prompts: Sequence[PromptSpec] = BUILTIN_PROMPTS,
     on_shutdown: Callable[[], Awaitable[None]] | None = None,
@@ -196,7 +200,7 @@ def build_server(
         instructions=instructions,
         lifespan=lifespan,
     )
-    gate = CompatibilityGate(reader)
+    gate = ToolGuard(CompatibilityGate(reader), audit)
     _register_read_tools(server, reader, gate)
     register_resources(server, reader, gate.ensure)
     register_prompts(server, prompts)
@@ -209,24 +213,62 @@ def build_server(
     return server
 
 
-def _guarded(gate: CompatibilityGate, fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
-    """Run the compatibility gate first and turn client errors into typed error results."""
+class ToolGuard:
+    """What runs around every tool call: the compatibility gate and the audit log."""
+
+    def __init__(self, gate: CompatibilityGate, audit: AuditLog | None) -> None:
+        self.gate = gate
+        self.audit = audit
+
+    async def ensure(self) -> None:
+        await self.gate.ensure()
+
+
+def _guarded(gate: ToolGuard, fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """Run the compatibility gate first, audit the call, and type client errors."""
+    tool = fn.__name__
 
     @functools.wraps(fn)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        audit = gate.audit if gate.audit is not None and gate.audit.wants(tool) else None
+        call = uuid.uuid4().hex[:12]
+        began = time.monotonic()
+
+        def finish(outcome: Literal["ok", "error"], code: str | None, page: str | None) -> None:
+            if audit is not None:
+                elapsed = int((time.monotonic() - began) * 1000)
+                audit.finished(
+                    call, tool, kwargs, outcome=outcome, code=code, duration_ms=elapsed,
+                    result_page_id=page,
+                )  # fmt: skip
+
         try:
+            if audit is not None and tool in WRITE_TOOLS:
+                # Fails closed: a write that cannot be recorded is not made.
+                audit.started(call, tool, kwargs)
             await gate.ensure()
-            return await fn(*args, **kwargs)
+            result = await fn(*args, **kwargs)
         except DocmostError as exc:
+            finish("error", exc.code, None)
             # The SDK passes a returned CallToolResult through unchanged.
             return cast(R, error_result(exc))
+        except Exception:
+            finish("error", "INTERNAL", None)
+            raise
+        finish("ok", None, _page_of(tool, result))
+        return result
 
     return wrapper
 
 
-def _register_read_tools(
-    server: MCPServer[Any], reader: WikiReader, gate: CompatibilityGate
-) -> None:
+def _page_of(tool: str, result: object) -> str | None:
+    """The page a write produced or changed, for the audit log."""
+    name = "page_id" if tool == "add_comment" else "id"
+    value = getattr(result, name, None) if tool in WRITE_TOOLS else None
+    return value if isinstance(value, str) else None
+
+
+def _register_read_tools(server: MCPServer[Any], reader: WikiReader, gate: ToolGuard) -> None:
     async def search(
         query: Annotated[str, Field(description="Words to find in page titles and text.")],
         space: Annotated[OptionalText, Field(description="Limit to one space (slug or id).")] = "",
@@ -506,7 +548,7 @@ def _quoted(value: str, limit: int = 60) -> str:
     return f'"{flat if len(flat) <= limit else flat[: limit - 1] + "…"}"'
 
 
-def _register_move_tool(server: MCPServer[Any], mover: WikiMover, gate: CompatibilityGate) -> None:
+def _register_move_tool(server: MCPServer[Any], mover: WikiMover, gate: ToolGuard) -> None:
     async def move_page(
         page_id: Annotated[str, Field(description="Page id or slug id of the page to move.")],
         parent_page_id: Annotated[
@@ -563,7 +605,7 @@ def _register_move_tool(server: MCPServer[Any], mover: WikiMover, gate: Compatib
 
 
 def _register_comment_tool(
-    server: MCPServer[Any], commenter: WikiCommenter, gate: CompatibilityGate
+    server: MCPServer[Any], commenter: WikiCommenter, gate: ToolGuard
 ) -> None:
     async def add_comment(
         page_id: Annotated[str, Field(description="Page id or slug id.")],
@@ -668,7 +710,7 @@ def _register_write_tools(
     server: MCPServer[Any],
     writer: WikiWriter,
     reader: WikiReader,
-    gate: CompatibilityGate,
+    gate: ToolGuard,
     confirm_replace: bool,
 ) -> None:
     decide = _confirmation_resolvers(confirm_replace)

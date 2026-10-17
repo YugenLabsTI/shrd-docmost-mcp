@@ -11,6 +11,7 @@ from mcp.server.mcpserver import MCPServer
 from docmost_client import AsyncDocmostClient, ConfigError, DocmostSettings
 from docmost_client.settings import env_flag
 from yugen_docmost_mcp._version import __version__
+from yugen_docmost_mcp.audit import AuditLog, audit_settings_from_env
 from yugen_docmost_mcp.prompts import BUILTIN_PROMPTS, PromptSpec, prompts_from_env
 from yugen_docmost_mcp.server import build_server
 
@@ -26,6 +27,7 @@ def create_server(
     *,
     confirm_replace: bool = True,
     prompts: Sequence[PromptSpec] = BUILTIN_PROMPTS,
+    audit: AuditLog | None = None,
 ) -> MCPServer[Any]:
     """Build the server for ``settings`` with ``prompts`` (see ``prompts_from_env``).
 
@@ -41,6 +43,7 @@ def create_server(
         mover=client if settings.allow_move and not settings.read_only else None,
         confirm_replace=confirm_replace,
         prompts=prompts,
+        audit=audit,
         on_shutdown=client.aclose,
     )
 
@@ -57,10 +60,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         settings = DocmostSettings.from_env()
         confirm_replace = confirm_replace_from_env()
         prompts = prompts_from_env()
+        audit_settings = audit_settings_from_env()
+        audit = (
+            AuditLog.open(audit_settings.path, reads=audit_settings.reads)
+            if audit_settings.path is not None
+            else None
+        )
     except ConfigError as exc:
         sys.stderr.write(f"yugen-docmost-mcp: {exc}\n")
         raise SystemExit(2) from None
-    create_server(settings, confirm_replace=confirm_replace, prompts=prompts).run("stdio")
+    create_server(settings, confirm_replace=confirm_replace, prompts=prompts, audit=audit).run(
+        "stdio"
+    )
 
 
 if __name__ == "__main__":

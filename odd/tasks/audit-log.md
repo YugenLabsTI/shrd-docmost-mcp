@@ -17,7 +17,7 @@ Assumptions (agent decisions): enabled only when `DOCMOST_AUDIT_LOG` names a fil
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
 | T1 | S1, S4 | inline | done | L3 |
-| T2 | S1, S4 | inline | pending | |
+| T2 | S1, S4 | inline | done | L4 |
 | T3 | S2, S4 | inline | pending | |
 | T4 | S3, S4 | inline | pending | |
 
@@ -30,3 +30,4 @@ High-risk: T1, T2 (writes to disk on every call; a governance control). Independ
 - **L1 (2026-10-17, user, verbatim):** "Dale, sigamos con auditoria. Creo que la tienes muy clara, pero adicional a lo que me expusiste, ¿Crees que genere valor una tool de auditoria donde genere reporte de auditoria o simlemente pueda dar un panorama amplio de como ha sido el comportamiento con base a los logs?"
 - **L2 (2026-10-17, user decision):** "Log + reporte CLI + panorama MCP (Recommended)" — "Log JSONL append-only (escrituras + intentos rechazados, sin contenido), comando `audit report` para el operador, y un recurso/tool de solo lectura para el agente, apagado por defecto (DOCMOST_AUDIT_EXPOSE=1)."
 - **L3 (2026-10-17, T1 evidence):** RED: ModuleNotFoundError. GREEN: 16 tests; ruff, pyright clean. `yugen_docmost_mcp/audit.py`: `audit_settings_from_env` (flags need the log), `AuditLog.open` (creates/appends with `os.open(..., 0o600)`, ConfigError when impossible), `wants` (writes always, reads on request), `started` (raises `AuditUnavailableError` / `AUDIT_UNAVAILABLE`), `finished` (best effort, warning without system details), allowlisted string arguments cleaned of control characters and truncated to 128 chars, one `os.write` per line with `O_APPEND`; `read_events` (skips malformed lines, `since` filter) and `summarize` (calls, ok/error per tool, errors by code, spaces, pages written/refused, interrupted calls, first/last).
+- **L4 (2026-10-17, T2 evidence):** RED: `build_server()` had no `audit`. GREEN: 587 passed; ruff, pyright clean. `ToolGuard(gate, audit)` replaces the bare gate around every tool: write tools record `started` before the compatibility gate and the call (an unwritable log refuses the write with `AUDIT_UNAVAILABLE` and the writer is never called), every audited call records `finished` with outcome, code (`DocmostError.code`, `INTERNAL` for unexpected errors) and duration; cancellations leave `started` alone (reported as interrupted); `result_page_id` from the page a write produced (`page_id` for comments). Resources keep using `gate.ensure`. `create_server(audit=...)`; `main` reads `DOCMOST_AUDIT_*` inside the ConfigError block (exit 2 if the log cannot be opened). Defaults travel into the record (e.g. `format`).
