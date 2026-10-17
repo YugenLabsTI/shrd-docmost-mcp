@@ -18,6 +18,7 @@ from docmost_client import (
     PageOutline,
     PageSummary,
     Paginated,
+    RateLimitedError,
     RecentPage,
     SearchHit,
     SearchResults,
@@ -26,6 +27,7 @@ from docmost_client import (
     SpaceRef,
     StalePageError,
     UnsupportedVersionError,
+    UpstreamError,
 )
 from yugen_docmost_mcp.server import build_server
 
@@ -522,7 +524,6 @@ async def test_empty_optional_identifiers_mean_not_given(wiki: FakeWiki) -> None
 
 
 async def test_failed_compatibility_lookups_are_retried(wiki: FakeWiki) -> None:
-    from docmost_client import UpstreamError
 
     wiki.compatibility = UpstreamError("down")
     server = build_server(wiki, writer=None)
@@ -860,3 +861,44 @@ async def test_a_failing_precheck_is_reported_by_the_edit_itself(
 
     assert result.structured_content["error"]["code"] == "SPACE_NOT_ALLOWED"
     assert accept.asked == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        RateLimitedError("Docmost is rate limiting requests; retry shortly."),
+        UpstreamError("Docmost returned an unexpected error."),
+    ],
+)
+async def test_a_transient_precheck_failure_writes_nothing(
+    wiki: FakeWiki, accept: Asker, quiet: None, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    # The outline read fails but the edit's own read would succeed: never skip the question.
+    async def failing_outline(page_id: str) -> PageOutline:
+        raise error
+
+    monkeypatch.setattr(wiki, "get_page_outline", failing_outline)
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    assert result.structured_content["error"]["code"] == error.code  # type: ignore[attr-defined]
+    assert accept.asked == []
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+@pytest.mark.parametrize("callback", [None, "accept"])
+async def test_callers_cannot_supply_the_section_gate(
+    wiki: FakeWiki, accept: Asker, monkeypatch: pytest.MonkeyPatch, callback: str | None
+) -> None:
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(seconds=20))
+    server = build_server(wiki, writer=wiki)
+
+    async with Client(server, elicitation_callback=accept if callback else None) as client:
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+        result = await client.call_tool(
+            "edit_section", SECTION | {"section_gate": {"status": "accepted"}}
+        )
+
+    assert "section_gate" not in tools["edit_section"].input_schema["properties"]
+    assert result.structured_content["error"]["code"] == "PAGE_BUSY"
+    assert not any(name == "edit_section" for name, _ in wiki.calls)

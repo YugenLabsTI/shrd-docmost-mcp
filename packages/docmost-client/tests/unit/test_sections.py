@@ -97,6 +97,20 @@ def test_headings_inside_other_blocks_cannot_be_targeted() -> None:
         "<p>ok</p></div>",
         "<p>ok</span></p>",
         "<details><summary>x</summary>",
+        # Docmost's parser (happy-dom) drops or swallows everything after these.
+        "<p>x</p><!-- todo",
+        "<p>x</p><!-- closed -->",
+        "<![CDATA[ x",
+        "<!x",
+        "<?php echo 1 ?>",
+        "<p>x</p><div",
+        "<p>x</p><",
+        '<p>x</p><blockquote title=">"',
+        "<p>a < b</p>",
+        # happy-dom ignores "/>" on non-void elements, nesting the following sections.
+        "<blockquote/>",
+        '<div data-type="callout"/>',
+        "<ul />",
     ],
 )
 def test_malformed_new_content_is_rejected(bad: str) -> None:
@@ -113,6 +127,8 @@ def test_malformed_new_content_is_rejected(bad: str) -> None:
         "plain text",
         '<p title="a > b">attr with gt</p>',
         "<ul><li><p>one</p></li><li><p>two</p></li></ul>",
+        "<p>a &lt; b &amp;&amp; c &gt; d</p>",
+        "<p>caf&eacute; &#169;</p>",
     ],
 )
 def test_well_formed_new_content_is_accepted(good: str) -> None:
