@@ -1,0 +1,27 @@
+# An example team prompt. Point DOCMOST_PROMPTS_DIR at a directory of files like this one.
+name = "weekly_report"
+title = "Draft the weekly report"
+description = "Read what changed in a space this week and draft a report page."
+template = """
+Draft this week's report for the Docmost space {{space}}.
+
+Read the recently updated pages in that space (the list_recent_pages tool or the
+docmost://recent resource), open the ones that changed this week, and draft a report
+with three sections: Done, In progress, and Risks. Cite every page by title.
+{{extra}}
+Show me the draft first; create the page under {{parent}} only after I confirm.
+"""
+
+[[arguments]]
+name = "space"
+description = "Space slug or id."
+required = true
+
+[[arguments]]
+name = "parent"
+description = "Parent page for the report."
+default = "the space root"
+
+[[arguments]]
+name = "extra"
+description = "Anything else the report must cover."
