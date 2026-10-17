@@ -60,6 +60,18 @@ class WikiCommenter(Protocol):
     ) -> Comment: ...
 
 
+class WikiMover(Protocol):
+    async def move_page(
+        self,
+        page_id: str,
+        *,
+        parent_page_id: str | None,
+        after_page_id: str | None,
+        placement: Literal["start", "end"],
+        expected_updated_at: datetime,
+    ) -> Page: ...
+
+
 class WikiWriter(Protocol):
     async def create_page(
         self,

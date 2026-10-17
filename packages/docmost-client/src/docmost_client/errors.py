@@ -102,6 +102,12 @@ class CommentsDisabledError(DocmostError):
     code: ClassVar[str] = "COMMENTS_DISABLED"
 
 
+class MoveDisabledError(DocmostError):
+    """A page move was attempted while DOCMOST_ALLOW_MOVE is off (the default)."""
+
+    code: ClassVar[str] = "MOVE_DISABLED"
+
+
 class ClockSkewError(DocmostError):
     """Docmost's clock and the local clock disagree by more than a few minutes.
 

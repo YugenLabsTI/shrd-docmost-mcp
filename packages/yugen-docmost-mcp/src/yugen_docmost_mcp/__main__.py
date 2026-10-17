@@ -29,14 +29,16 @@ def create_server(
 ) -> MCPServer[Any]:
     """Build the server for ``settings`` with ``prompts`` (see ``prompts_from_env``).
 
-    Page write tools exist only when DOCMOST_READ_ONLY is off, and ``add_comment`` only when
-    DOCMOST_ALLOW_COMMENTS is on; the client enforces both again on every call.
+    Page write tools exist only when DOCMOST_READ_ONLY is off, ``move_page`` only when
+    DOCMOST_ALLOW_MOVE is on as well, and ``add_comment`` only when DOCMOST_ALLOW_COMMENTS
+    is on; the client enforces these again on every call.
     """
     client = AsyncDocmostClient(settings)
     return build_server(
         client,
         None if settings.read_only else client,
         commenter=client if settings.allow_comments else None,
+        mover=client if settings.allow_move and not settings.read_only else None,
         confirm_replace=confirm_replace,
         prompts=prompts,
         on_shutdown=client.aclose,

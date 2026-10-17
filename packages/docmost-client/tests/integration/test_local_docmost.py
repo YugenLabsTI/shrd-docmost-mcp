@@ -10,6 +10,7 @@ import os
 import uuid
 from collections.abc import Iterator
 from datetime import timedelta, timezone
+from typing import Any
 
 import pytest
 
@@ -52,7 +53,8 @@ def reader() -> Iterator[DocmostClient]:
 
 @pytest.fixture(scope="module")
 def writer() -> Iterator[DocmostClient]:
-    with DocmostClient(_settings(DOCMOST_READ_ONLY="0")) as client:
+    # Docmost allows 10 logins per minute per IP: one writer serves page writes and moves.
+    with DocmostClient(_settings(DOCMOST_READ_ONLY="0", DOCMOST_ALLOW_MOVE="1")) as client:
         yield client
 
 
@@ -214,8 +216,12 @@ def commenter() -> Iterator[DocmostClient]:
         yield client
 
 
-def test_comment_only_mode_comments_but_never_edits(commenter: DocmostClient) -> None:
-    page = next(iter(commenter.list_children(space="sandbox").items))
+def test_comment_only_mode_comments_but_never_edits(
+    commenter: DocmostClient, writer: DocmostClient
+) -> None:
+    # A fresh page: comments are listed oldest first, so a page every run comments on
+    # would push the new comment past the first page of results.
+    page = writer.create_page(space="sandbox", title=f"Comments {uuid.uuid4().hex[:8]}")
 
     comment = commenter.create_comment(page.id, "Integration comment.\nSecond line.")
     listed = commenter.list_comments(page.id).items
@@ -377,3 +383,77 @@ def test_pages_with_mentions_round_trip_without_new_mentions(writer: DocmostClie
             expected_updated_at=edited.updated_at,
         )
     assert writer.get_page(page.id).updated_at == edited.updated_at
+
+
+def test_pages_move_and_land_where_asked(writer: DocmostClient) -> None:
+    mover = writer
+    tag = uuid.uuid4().hex[:8]
+    parent = mover.create_page(space="sandbox", title=f"Move parent {tag}")
+    first = mover.create_page(space="sandbox", title=f"A {tag}", parent_page_id=parent.id)
+    last = mover.create_page(space="sandbox", title=f"B {tag}", parent_page_id=parent.id)
+    page = mover.create_page(space="sandbox", title=f"X {tag}")
+
+    def order() -> list[str]:
+        return [child.id for child in mover.list_children(parent_page_id=parent.id).items]
+
+    moved = mover.move_page(
+        page.id,
+        parent_page_id=parent.id,
+        after_page_id=first.id,
+        expected_updated_at=mover.get_page(page.id).updated_at,
+    )
+    assert moved.parent_page_id == parent.id
+    assert order() == [first.id, page.id, last.id]
+
+    moved = mover.move_page(
+        page.id, parent_page_id=parent.id, placement="start", expected_updated_at=moved.updated_at
+    )
+    assert order() == [page.id, first.id, last.id]
+
+    moved = mover.move_page(page.id, parent_page_id=parent.id, expected_updated_at=moved.updated_at)
+    assert order() == [first.id, last.id, page.id]
+
+    with pytest.raises(StalePageError):
+        mover.move_page(page.id, parent_page_id=None, expected_updated_at=page.updated_at)
+
+    moved = mover.move_page(page.id, parent_page_id=None, expected_updated_at=moved.updated_at)
+    assert moved.parent_page_id is None
+    assert order() == [first.id, last.id]
+
+    with pytest.raises(InvalidRequestError):
+        mover.move_page(parent.id, parent_page_id=first.id, expected_updated_at=parent.updated_at)
+
+
+def test_start_placement_below_the_first_integer_key(writer: DocmostClient) -> None:
+    # The first page moved under an empty parent gets a0000; the next "start" move must
+    # cross to the previous integer head (Zz...), as Docmost's own library does.
+    tag = uuid.uuid4().hex[:8]
+    parent = writer.create_page(space="sandbox", title=f"Start parent {tag}")
+    one = writer.create_page(space="sandbox", title=f"One {tag}")
+    two = writer.create_page(space="sandbox", title=f"Two {tag}")
+
+    writer.move_page(one.id, parent_page_id=parent.id, expected_updated_at=one.updated_at)
+    writer.move_page(
+        two.id, parent_page_id=parent.id, placement="start", expected_updated_at=two.updated_at
+    )
+
+    children = writer.list_children(parent_page_id=parent.id).items
+    assert [child.id for child in children] == [two.id, one.id]
+
+
+def test_moves_need_the_move_flag() -> None:
+    from docmost_client import MoveDisabledError
+
+    # Refused before any request, so this client never logs in.
+    client = DocmostClient(_settings(DOCMOST_READ_ONLY="0"))
+    try:
+        with pytest.raises(MoveDisabledError):
+            client.move_page("anything", parent_page_id=None, expected_updated_at=_now())
+    finally:
+        client.close()
+
+
+def _now() -> Any:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC)

@@ -22,7 +22,7 @@ from docmost_client import (
 from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
-from yugen_docmost_mcp.ports import WikiCommenter, WikiReader, WikiWriter
+from yugen_docmost_mcp.ports import WikiCommenter, WikiMover, WikiReader, WikiWriter
 from yugen_docmost_mcp.prompts import BUILTIN_PROMPTS, PromptSpec, register_prompts
 from yugen_docmost_mcp.resources import register_resources
 from yugen_docmost_mcp.results import (
@@ -72,6 +72,10 @@ _COMMENT = ToolAnnotations(
 _UPDATE = ToolAnnotations(
     read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False
 )
+# A move changes no content and can be undone by moving the page back.
+_MOVE = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
+)
 
 _ERRORS = (
     "On failure the result has is_error=true and "
@@ -112,6 +116,10 @@ _NO_COMMENT_HINT = (
     "Comments: `list_comments` reads a page's discussion; this server cannot add comments."
 )
 _CONFIRM_HINT = " A `replace` asks the user to confirm first; if they decline, nothing is written."
+_MOVE_HINT = (
+    " To reorganize, `move_page` moves a page under another parent (or to the space root) "
+    "within its space; it also requires the `updated_at` you read."
+)
 _READ_ONLY_HINT = (
     "This server is read-only: it cannot create or change pages. Tell the user if a change "
     "is needed."
@@ -154,6 +162,7 @@ def build_server(
     writer: WikiWriter | None,
     *,
     commenter: WikiCommenter | None = None,
+    mover: WikiMover | None = None,
     confirm_replace: bool = True,
     prompts: Sequence[PromptSpec] = BUILTIN_PROMPTS,
     on_shutdown: Callable[[], Awaitable[None]] | None = None,
@@ -166,6 +175,7 @@ def build_server(
     write_hint = _READ_ONLY_HINT
     if writer is not None:
         write_hint = _WRITE_HINT + (_CONFIRM_HINT if confirm_replace else "")
+        write_hint += _MOVE_HINT if mover is not None else ""
     instructions = INSTRUCTIONS.format(
         write_hint=write_hint,
         comment_hint=_NO_COMMENT_HINT if commenter is None else _COMMENT_HINT,
@@ -194,6 +204,8 @@ def build_server(
         _register_comment_tool(server, commenter, gate)
     if writer is not None:
         _register_write_tools(server, writer, reader, gate, confirm_replace)
+    if mover is not None:
+        _register_move_tool(server, mover, gate)
     return server
 
 
@@ -492,6 +504,62 @@ def _quoted(value: str, limit: int = 60) -> str:
     """Show agent-supplied text safely inside a question to the user: one line, bounded."""
     flat = " ".join("".join(ch if ch.isprintable() else " " for ch in value).split())
     return f'"{flat if len(flat) <= limit else flat[: limit - 1] + "…"}"'
+
+
+def _register_move_tool(server: MCPServer[Any], mover: WikiMover, gate: CompatibilityGate) -> None:
+    async def move_page(
+        page_id: Annotated[str, Field(description="Page id or slug id of the page to move.")],
+        parent_page_id: Annotated[
+            str,
+            Field(
+                description="New parent page (id or slug id); an empty string moves it to "
+                "the space root."
+            ),
+        ],
+        expected_updated_at: Annotated[
+            AwareDatetime, Field(description="updated_at from your last get_page.")
+        ],
+        after_page_id: Annotated[
+            OptionalText,
+            Field(
+                description="Place it right after this page under the new parent (see "
+                "list_children). Omit to use placement."
+            ),
+        ] = "",
+        placement: Annotated[
+            Literal["start", "end"],
+            Field(description="Without after_page_id: first or last under the new parent."),
+        ] = "end",
+    ) -> PageInfo:
+        page = await mover.move_page(
+            page_id,
+            parent_page_id=parent_page_id or None,
+            after_page_id=after_page_id or None,
+            placement=placement,
+            expected_updated_at=expected_updated_at,
+        )
+        return PageInfo.of(page)
+
+    server.add_tool(
+        _guarded(gate, move_page),
+        name="move_page",
+        title="Move a page",
+        description=(
+            "Move a page under another parent page, or to the root of its space, and place "
+            "it among its new siblings: right after after_page_id, or first or last "
+            "(placement). Docmost moves pages only within their space. Pass the "
+            "updated_at from your last get_page as expected_updated_at. The content does "
+            "not change. Returns the page after the move. "
+            + _ERRORS
+            + "STALE_PAGE (retryable after re-reading), MOVE_DISABLED, READ_ONLY, "
+            "FORBIDDEN (locked or not editable), NOT_FOUND, SPACE_NOT_ALLOWED, "
+            "INVALID_INPUT (e.g. another space, under its own descendant, no room between "
+            "the neighbours), AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, "
+            "UNSUPPORTED_VERSION."
+        ),
+        annotations=_MOVE,
+        structured_output=True,
+    )
 
 
 def _register_comment_tool(
