@@ -99,3 +99,14 @@ def test_report_errors_exit_2(
 
     assert code == 2
     assert message in err
+
+
+def test_a_huge_since_is_a_clear_error(
+    capsys: pytest.CaptureFixture[str], audit_file: Path
+) -> None:
+    code, _, err = run(
+        capsys, "audit", "report", "--file", str(audit_file), "--since", "99999999999d"
+    )
+
+    assert code == 2
+    assert "--since" in err

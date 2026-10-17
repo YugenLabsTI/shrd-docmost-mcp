@@ -244,7 +244,8 @@ default = "neutral"                # optional arguments only
 With `DOCMOST_AUDIT_LOG=/var/log/docmost-mcp/audit.jsonl` the server appends one JSON line
 per event to that file (created with mode `0600`): every write, comment and move, and
 every refused attempt (a declined confirmation, `PAGE_BUSY`, `FORBIDDEN`, ...). Reads are
-added with `DOCMOST_AUDIT_READS=1`.
+added with `DOCMOST_AUDIT_READS=1`. Calls the MCP layer rejects before they reach a tool
+(arguments that break the tool's input schema, unknown tool names) are not recorded.
 
 ```json
 {"ts":"2026-10-17T10:05:00+00:00","session":"3f2a9c1b7d4e","call":"9b1c...","phase":"finished",
@@ -254,11 +255,14 @@ added with `DOCMOST_AUDIT_READS=1`.
 
 - Only ids and enum-like arguments are kept (`page_id`, `space`, `parent_page_id`,
   `operation`, `format`, `heading_id`, `after_page_id`, `placement`, `parent_comment_id`).
-  Page content, titles, comment text, search queries and icons are never written.
+  Page content, titles, comment text, search queries and icons are never written. Values
+  are cut to 128 characters, and control, formatting and line-separator characters are
+  replaced by spaces so they cannot disguise the report.
 - A write records a `started` line first; if that cannot be written, the write is refused
   with `AUDIT_UNAVAILABLE` and nothing changes in Docmost. A `started` line without its
   `finished` line marks a call that was interrupted.
-- The server does not start when the file cannot be created or appended to. It never
+- The server does not start when the file cannot be created or appended to. A file that
+  already exists keeps its permissions. It never
   rotates the file: use logrotate with `copytruncate`, or similar.
 
 Operators read it with the report command, independently of the agent:

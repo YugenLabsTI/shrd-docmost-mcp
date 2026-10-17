@@ -248,3 +248,32 @@ def test_summary_counts_outcomes_refusals_pages_and_interrupted_calls(tmp_path: 
     assert summary.interrupted == [{"call": "c4", "tool": "move_page", "ts": NOW.isoformat()}]
     assert summary.first == NOW.isoformat()
     assert summary.last == NOW.isoformat()
+
+
+def test_unicode_format_and_control_characters_are_removed(tmp_path: Path) -> None:
+    audit = log(tmp_path)
+
+    audit.started("c1", "add_comment", {"page_id": "p\u202eevil\u009b\u2028x\u200by"})
+
+    assert lines(tmp_path / "audit.jsonl")[0]["args"]["page_id"] == "p evil  x y"
+
+
+def test_unencodable_values_are_still_recorded(tmp_path: Path) -> None:
+    audit = log(tmp_path)
+
+    audit.started("c1", "add_comment", {"page_id": "p\ud800"})
+
+    assert len(lines(tmp_path / "audit.jsonl")) == 1
+
+
+def test_summary_tolerates_hand_edited_lines(tmp_path: Path) -> None:
+    path = write_log(
+        tmp_path / "a.jsonl",
+        event("finished", "create_page", "c1", outcome="ok", args=["not", "a", "dict"]),
+        event("finished", "update_page", "c2", outcome="error", code=7, args="x"),
+    )
+
+    summary = summarize(read_events(path, since=None))
+
+    assert summary.calls == 2
+    assert summary.errors_by_code == {"7": 1}

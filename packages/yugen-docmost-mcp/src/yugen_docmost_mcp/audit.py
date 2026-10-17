@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -39,7 +40,8 @@ AUDITED_ARGUMENTS = frozenset(
 )  # fmt: skip
 WRITE_TOOLS = frozenset({"create_page", "update_page", "edit_section", "move_page", "add_comment"})
 MAX_VALUE_LENGTH = 128
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+# Control, format (e.g. bidi overrides) and line/paragraph separators could spoof the report.
+_HIDDEN = frozenset({"Cc", "Cf", "Zl", "Zp"})
 
 Outcome = Literal["ok", "error"]
 
@@ -158,7 +160,8 @@ class AuditLog:
         return os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
 
     def _append(self, event: Mapping[str, Any]) -> None:
-        line = (json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+        # ASCII JSON: any character (even a lone surrogate) is written as an escape.
+        line = (json.dumps(event, separators=(",", ":")) + "\n").encode()
         fd = self._open()
         try:
             # One write of a short line: O_APPEND keeps concurrent writers' lines whole.
@@ -168,7 +171,8 @@ class AuditLog:
 
 
 def _clean(value: str) -> str:
-    return _CONTROL.sub(" ", value)[:MAX_VALUE_LENGTH]
+    shown = "".join(" " if unicodedata.category(char) in _HIDDEN else char for char in value)
+    return shown[:MAX_VALUE_LENGTH]
 
 
 def read_events(path: Path, since: datetime | None) -> Iterator[dict[str, Any]]:
@@ -232,7 +236,10 @@ def summarize(events: Iterable[Mapping[str, Any]]) -> AuditSummary:
         outcome = "ok" if event.get("outcome") == "ok" else "error"
         counts = summary.by_tool.setdefault(tool, {"ok": 0, "error": 0})
         counts[outcome] += 1
-        args = cast(Mapping[str, Any], event.get("args") or {})
+        raw_args = event.get("args")
+        args: Mapping[str, Any] = (
+            cast(Mapping[str, Any], raw_args) if isinstance(raw_args, dict) else {}
+        )
         space = args.get("space")
         if isinstance(space, str):
             summary.spaces[space] = summary.spaces.get(space, 0) + 1
@@ -261,7 +268,10 @@ def parse_since(value: str, now: datetime) -> datetime:
     if match is None:
         raise ValueError(value)
     amount, unit = int(match.group(1)), match.group(2)
-    return now - timedelta(**{_UNITS[unit]: amount})
+    try:
+        return now - timedelta(**{_UNITS[unit]: amount})
+    except OverflowError:
+        raise ValueError(value) from None
 
 
 def render_report(summary: AuditSummary, source: str) -> str:
