@@ -14,7 +14,12 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from docmost_client._content import check_content, check_size, comment_document
+from docmost_client._content import (
+    check_content,
+    check_size,
+    comment_document,
+    top_level_headings,
+)
 from docmost_client.errors import (
     CommentsDisabledError,
     DocmostError,
@@ -33,7 +38,9 @@ from docmost_client.models import (
     ContentFormat,
     ContentOperation,
     CurrentUser,
+    Heading,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -154,6 +161,17 @@ def get_page(allowlist: SpaceAllowlist, page_id: str, format: ContentFormat) -> 
     if page.deleted_at is not None:
         raise NotFoundError("The page is in the trash.")
     return page
+
+
+def get_page_outline(allowlist: SpaceAllowlist, page_id: str) -> Op[PageOutline]:
+    page = yield from get_page(allowlist, page_id, "json")
+    headings = [
+        Heading(id=heading_id, level=level, text=text)
+        for heading_id, level, text in top_level_headings(page.content)
+    ]
+    return PageOutline(
+        page_id=page.id, title=page.title, updated_at=page.updated_at, headings=headings
+    )
 
 
 def list_children(

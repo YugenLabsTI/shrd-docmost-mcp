@@ -16,6 +16,7 @@ from docmost_client.models import (
     ContentOperation,
     CurrentUser,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -106,6 +107,10 @@ class DocmostClient:
     def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
         return self._run(_ops.get_page(self._allowlist, page_id, format))
+
+    def get_page_outline(self, page_id: str) -> PageOutline:
+        """List a page's top-level headings (id, level, text) for section edits."""
+        return self._run(_ops.get_page_outline(self._allowlist, page_id))
 
     def list_children(
         self,
@@ -287,6 +292,10 @@ class AsyncDocmostClient:
     async def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
         return await self._run(_ops.get_page(self._allowlist, page_id, format))
+
+    async def get_page_outline(self, page_id: str) -> PageOutline:
+        """List a page's top-level headings (id, level, text) for section edits."""
+        return await self._run(_ops.get_page_outline(self._allowlist, page_id))
 
     async def list_children(
         self,
