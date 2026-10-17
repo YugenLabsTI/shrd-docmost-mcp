@@ -280,9 +280,12 @@ def test_section_edits_change_only_their_section(
     from datetime import UTC, datetime
 
     from docmost_client import _ops
+    from docmost_client._protocol import ServerClock
 
-    # Pretend two minutes passed after each save, so the busy window does not apply.
-    monkeypatch.setattr(_ops, "_utcnow", lambda: datetime.now(UTC) + timedelta(minutes=2))
+    # Pretend two minutes passed on both clocks, so the busy window does not apply.
+    later = lambda *_: datetime.now(UTC) + timedelta(minutes=2)  # noqa: E731
+    monkeypatch.setattr(ServerClock, "now", later)
+    monkeypatch.setattr(_ops, "_utcnow", later)
     page = writer.create_page(
         space="sandbox", title=f"Sections {uuid.uuid4().hex[:8]}", content=SECTIONED, format="html"
     )
@@ -328,3 +331,49 @@ def test_section_edits_change_only_their_section(
     assert {h.text: h.id for h in after.headings} == {
         k: v for k, v in ids.items() if k != "Advanced"
     }
+
+
+def test_pages_with_mentions_round_trip_without_new_mentions(writer: DocmostClient) -> None:
+    me = writer.me()
+    page = writer.create_page(space="sandbox", title=f"Mentions {uuid.uuid4().hex[:8]}")
+    mention = {"type": "mention", "attrs": {"id": uuid.uuid4().hex, "label": me.name,
+                                            "entityType": "user", "entityId": me.id,
+                                            "creatorId": me.id}}  # fmt: skip
+    # The client never adds mentions, so seed one (a self-mention notifies nobody).
+    writer._session.call(  # pyright: ignore[reportPrivateUsage]
+        "/pages/update",
+        {
+            "pageId": page.id,
+            "operation": "replace",
+            "format": "json",
+            "content": {"type": "doc", "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Ask "}, mention]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "Old body."}]},
+            ]},
+        },
+    )  # fmt: skip
+    current = writer.get_page(page.id, format="html")
+    assert isinstance(current.content, str)
+    assert f'data-entity-id="{me.id}"' in current.content
+
+    edited = writer.update_page(
+        page.id,
+        content=current.content.replace("Old body.", "New body."),
+        operation="replace",
+        format="html",
+        expected_updated_at=current.updated_at,
+    )
+    assert isinstance(edited.content, str)
+    assert "New body." in edited.content
+    assert f'data-entity-id="{me.id}"' in edited.content
+
+    stranger = edited.content.replace(me.id, str(uuid.uuid4()))
+    with pytest.raises(InvalidRequestError, match="not already on the page"):
+        writer.update_page(
+            page.id,
+            content=stranger,
+            operation="replace",
+            format="html",
+            expected_updated_at=edited.updated_at,
+        )
+    assert writer.get_page(page.id).updated_at == edited.updated_at
