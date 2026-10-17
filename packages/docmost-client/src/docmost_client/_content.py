@@ -7,7 +7,9 @@ section 5) that would otherwise silently lose data or cause side effects.
 import html
 import json
 import re
-from typing import Any, cast
+from collections.abc import Collection
+from html.parser import HTMLParser
+from typing import Any, Literal, cast
 
 from docmost_client.errors import InvalidRequestError
 from docmost_client.models import ContentFormat
@@ -18,9 +20,22 @@ from docmost_client.models import ContentFormat
 _FRONT_MATTER = re.compile(r"[\s\ufeff]*---[\s\S]*?---")
 _MENTION_MARKUP = re.compile(r"""data-type\s*=\s*["']?mention\b""", re.IGNORECASE)
 
+# What Docmost compares to decide whom to notify: (entityType, entityId) of a mention.
+MentionKey = tuple[str | None, str]
 
-def check_content(content: object, format: ContentFormat, max_bytes: int) -> None:
-    """Raise InvalidRequestError when ``content`` must not be sent as ``format``."""
+
+def check_content(
+    content: object,
+    format: ContentFormat,
+    max_bytes: int,
+    *,
+    mentions: Literal["refuse", "defer"] = "refuse",
+) -> None:
+    """Raise InvalidRequestError when ``content`` must not be sent as ``format``.
+
+    With ``mentions="defer"`` mentions are left to ``check_mentions``, which needs the
+    current page.
+    """
     if format == "json":
         if not isinstance(content, dict):
             raise InvalidRequestError(
@@ -52,11 +67,121 @@ def check_content(content: object, format: ContentFormat, max_bytes: int) -> Non
         raise InvalidRequestError(
             f"content is {size} bytes, over the DOCMOST_MAX_CONTENT_BYTES limit of {max_bytes}."
         )
-    if has_mention:
+    if has_mention and mentions == "refuse":
         raise InvalidRequestError(
             "content contains mention nodes, which notify the mentioned users; this client "
             "does not write mentions. Use plain text names instead."
         )
+
+
+def check_mentions(
+    content: object, format: ContentFormat, page_mentions: Collection[MentionKey]
+) -> None:
+    """Allow only mentions already on the page.
+
+    Docmost notifies (in-app and by email) only users who were not mentioned in the
+    previously saved content, so keeping existing mentions notifies nobody.
+    """
+    if any(key is None or key not in page_mentions for key in mention_keys(content, format)):
+        raise InvalidRequestError(
+            "content contains mentions that are not already on the page; new mentions notify "
+            "the mentioned users, so this client only keeps existing ones. Use plain text "
+            "names instead."
+        )
+
+
+def mention_keys(content: object, format: ContentFormat) -> list[MentionKey | None]:
+    """One entry per mention in ``content``; None when it cannot be matched to a user or page."""
+    return [key for _, key in _mentions(content, format)]
+
+
+def page_mentions(content: object, format: ContentFormat) -> set[MentionKey]:
+    """Who Docmost counts as already mentioned on a page.
+
+    Docmost skips mention nodes without a node id and keeps only the first node with
+    each id when it builds that list, so neither counts here.
+    """
+    seen: set[str] = set()
+    keys: set[MentionKey] = set()
+    for node_id, key in _mentions(content, format):
+        if node_id is None or node_id in seen:
+            continue
+        seen.add(node_id)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+# (node id, key) of each mention, in document order.
+_Mention = tuple[str | None, MentionKey | None]
+
+
+def _mentions(content: object, format: ContentFormat) -> list[_Mention]:
+    if format == "json":
+        return [_json_mention(node) for node in _json_mentions(content)]
+    if not isinstance(content, str):
+        return []
+    collector = _MentionCollector()
+    collector.feed(content)
+    collector.close()
+    # Markup the parser does not see as an element (entity-encoded, malformed) may still
+    # become a mention in Docmost, which decodes entities first: never let it through.
+    hidden = len(_MENTION_MARKUP.findall(html.unescape(content))) - len(collector.found)
+    return collector.found + [(None, None)] * max(hidden, 0)
+
+
+class _MentionCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found: list[_Mention] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not any(
+            name == "data-type" and (value or "").lower() == "mention" for name, value in attrs
+        ):
+            return
+        names = [name for name, _ in attrs]
+        if len(set(names)) != len(names):
+            # Docmost keeps the first of duplicated attributes, this parser the last:
+            # such a mention cannot be matched reliably.
+            self.found.append((None, None))
+            return
+        values = dict(attrs)
+        node_id = values.get("data-id")
+        self.found.append(
+            (node_id or None, _key(values.get("data-entity-type"), values.get("data-entity-id")))
+        )
+
+    handle_startendtag = handle_starttag
+
+
+def _key(entity_type: object, entity_id: object) -> MentionKey | None:
+    if not isinstance(entity_id, str) or not entity_id:
+        return None
+    return (entity_type if isinstance(entity_type, str) else None, entity_id)
+
+
+def _json_mention(node: dict[str, Any]) -> _Mention:
+    attrs = node.get("attrs")
+    if not isinstance(attrs, dict):
+        return (None, None)
+    values = cast(dict[str, Any], attrs)
+    node_id = values.get("id")
+    return (
+        node_id if isinstance(node_id, str) and node_id else None,
+        _key(values.get("entityType"), values.get("entityId")),
+    )
+
+
+def _json_mentions(node: object) -> list[dict[str, Any]]:
+    """Every mention node at any depth (Docmost walks all descendants, mentions included)."""
+    if isinstance(node, dict):
+        mapping = cast(dict[str, Any], node)
+        found = [mapping] if mapping.get("type") == "mention" else []
+        return found + [inner for value in mapping.values() for inner in _json_mentions(value)]
+    if isinstance(node, list):
+        return [found for item in cast(list[Any], node) for found in _json_mentions(item)]
+    return []
 
 
 _INLINE_NODES = frozenset({"text", "hardBreak", "mention", "emoji"})

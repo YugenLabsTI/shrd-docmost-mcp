@@ -243,3 +243,74 @@ async def test_async_client_edits_sections(api: respx.MockRouter) -> None:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+# --- server clock -----------------------------------------------------------------
+
+
+def dated(data: Any, date: str) -> httpx.Response:
+    return httpx.Response(
+        200, headers={"date": date}, json={"data": data, "success": True, "status": 200}
+    )
+
+
+def test_the_busy_window_uses_docmost_s_clock(client: DocmostClient, api: respx.MockRouter) -> None:
+    # The local clock says ten minutes passed (quiet_page); Docmost's says 20 seconds.
+    api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
+
+    with pytest.raises(PageBusyError) as exc:
+        edit(client)
+
+    # 40 seconds left on Docmost's clock (+1 rounding), minus the few microseconds since.
+    assert exc.value.retry_after_seconds in (40, 41)
+    assert api.routes["update"].call_count == 0
+
+
+@pytest.mark.parametrize(
+    "date",
+    [
+        "Fri, 16 Oct 2026 10:10:00 GMT",
+        # A wrong Date (e.g. from a proxy) must not switch the protection off.
+        "Thu, 01 Jan 2099 00:00:00 GMT",
+    ],
+)
+def test_whichever_clock_says_the_page_is_busy_wins(
+    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch, date: str
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=5))
+    api.routes["info"].mock(return_value=dated(page(), date))
+
+    with pytest.raises(PageBusyError):
+        edit(client)
+
+    assert api.routes["update"].call_count == 0
+
+
+def test_a_page_quiet_on_both_clocks_is_edited(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:10:00 GMT"))
+
+    edit(client)
+
+    assert api.routes["update"].call_count == 1
+
+
+def test_server_now_falls_back_to_the_local_clock(client: DocmostClient) -> None:
+    assert client.server_now() == UPDATED_AT + timedelta(minutes=10)
+
+
+@pytest.mark.anyio
+async def test_async_client_uses_docmost_s_clock(api: respx.MockRouter) -> None:
+    api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
+
+    async with AsyncDocmostClient(settings()) as client:
+        with pytest.raises(PageBusyError):
+            await client.edit_section(
+                PAGE_ID,
+                heading_id="install",
+                operation="prepend",
+                content=NEW,
+                expected_updated_at=UPDATED_AT,
+            )
+        assert client.server_now() >= datetime(2026, 10, 16, 10, 0, 20, tzinfo=UTC)

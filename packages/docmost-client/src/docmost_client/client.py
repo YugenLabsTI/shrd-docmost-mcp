@@ -243,8 +243,13 @@ class DocmostClient:
                 operation=operation,
                 content=content,
                 expected_updated_at=expected_updated_at,
+                clock=self._session.server_now,
             )
         )
+
+    def server_now(self) -> datetime:
+        """Docmost's current time, estimated from its latest response; else the local clock."""
+        return self._session.server_now() or _ops._utcnow()  # pyright: ignore[reportPrivateUsage]
 
     def _run(self, op: _ops.Op[T]) -> T:
         return _ops.drive(op, self._call)
@@ -459,11 +464,16 @@ class AsyncDocmostClient:
                 operation=operation,
                 content=content,
                 expected_updated_at=expected_updated_at,
+                clock=self._session.server_now,
             )
         )
 
     async def _run(self, op: _ops.Op[T]) -> T:
         return await _ops.drive_async(op, self._call)
+
+    def server_now(self) -> datetime:
+        """Docmost's current time, estimated from its latest response; else the local clock."""
+        return self._session.server_now() or _ops._utcnow()  # pyright: ignore[reportPrivateUsage]
 
     async def _call(self, path: str, payload: dict[str, Any]) -> Any:
         return await self._session.call(path, payload)

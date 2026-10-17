@@ -16,8 +16,11 @@ from pydantic import BaseModel, ValidationError
 
 from docmost_client._content import (
     check_content,
+    check_mentions,
     check_size,
     comment_document,
+    mention_keys,
+    page_mentions,
     top_level_headings,
 )
 from docmost_client._sections import SECTION_OPERATIONS, SectionOperation, splice_section
@@ -357,7 +360,7 @@ def update_page(
     if content is None and title is None and icon is None:
         raise InvalidRequestError("Nothing to update: provide content, title, or icon.")
     if content is not None:
-        check_content(content, format, settings.max_content_bytes)
+        check_content(content, format, settings.max_content_bytes, mentions="defer")
     if expected_updated_at is not None and expected_updated_at.utcoffset() is None:
         raise InvalidRequestError(
             "expected_updated_at must include a timezone (use the updated_at returned by get_page)."
@@ -375,6 +378,14 @@ def update_page(
             "Read it again and reapply the change.",
             current_updated_at=current.updated_at,
         )
+    if content is not None and mention_keys(content, format):
+        # Docmost's markdown output may drop mention markup: compare against the JSON.
+        if format == "markdown":
+            snapshot = yield from get_page(allowlist, current.id, "json")
+            existing = page_mentions(snapshot.content, "json")
+        else:
+            existing = page_mentions(current.content, format)
+        check_mentions(content, format, existing)
 
     # Never send spaceId or parentPageId: v0.96.0 ignores them, a later version may not.
     payload: dict[str, Any] = {"pageId": current.id}
@@ -408,9 +419,15 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def busy_retry_after(updated_at: datetime) -> int | None:
-    """Seconds to wait before a whole-page rewrite, or None when the page is quiet."""
-    age = _utcnow() - updated_at
+def busy_retry_after(updated_at: datetime, now: datetime | None = None) -> int | None:
+    """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
+
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of it
+    and the local clock is used, so a wrong clock on either side can only make the
+    window longer, never switch it off.
+    """
+    local = _utcnow()
+    age = (local if now is None else min(now, local)) - updated_at
     if age >= BUSY_WINDOW:
         return None
     return int((BUSY_WINDOW - age).total_seconds()) + 1
@@ -425,6 +442,7 @@ def edit_section(
     operation: SectionOperation,
     content: str,
     expected_updated_at: datetime,
+    clock: Callable[[], datetime | None] = lambda: None,
 ) -> Op[Page]:
     _require_writable(settings)
     if operation not in SECTION_OPERATIONS:
@@ -434,9 +452,8 @@ def edit_section(
             "expected_updated_at must include a timezone (use the updated_at returned by "
             "get_page_outline or get_page)."
         )
-    # Guards apply to the new fragment only: the rest of the page may legitimately hold
-    # mentions written by people.
-    check_content(content, "html", settings.max_content_bytes)
+    # Guards apply to the new fragment; it may keep mentions already on the page.
+    check_content(content, "html", settings.max_content_bytes, mentions="defer")
 
     current = yield from get_page(allowlist, page_id, "html")
     if current.is_locked:
@@ -450,11 +467,13 @@ def edit_section(
             "Read the outline again and reapply the change.",
             current_updated_at=current.updated_at,
         )
-    wait = busy_retry_after(current.updated_at)
+    # Read the clock after the page read, so it reflects that response's Date header.
+    wait = busy_retry_after(current.updated_at, clock())
     if wait is not None:
         raise page_busy(wait)
 
     html = current.content if isinstance(current.content, str) else ""
+    check_mentions(content, "html", page_mentions(html, "html"))
     new_html = splice_section(html, heading_id, operation, content)
     check_size(new_html, settings.max_content_bytes)
     data = yield (

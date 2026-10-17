@@ -111,15 +111,19 @@ HTML and writes the whole page back. Edits someone is typing in the browser are 
 up to ~45 s late and would be lost, so two protections apply:
 
 1. if the page was saved in the last 60 seconds, the call fails with `PAGE_BUSY`
-   (retryable, with `retry_after_seconds`) before anything is asked;
+   (retryable, with `retry_after_seconds`) before anything is asked. The window is
+   measured on the earlier of Docmost's clock (from the `Date` header of its
+   responses) and the local one, so a skewed clock on either side cannot shorten it;
 2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
 
 Only top-level headings can be targeted (not headings inside columns, callouts or
 collapsible blocks). New content must be well-formed HTML: every element closed and
 nested correctly, `<` written as `&lt;` in text, and no comments, `<!...>`/`<?...?>`
 constructs or self-closed non-void elements such as `<div/>` (Docmost's parser would let
-them swallow the rest of the page). It cannot contain mentions; mentions already on the
-page are kept.
+them swallow the rest of the page), and no `script`, `style`, `iframe`, `textarea` or
+other raw-text elements. New headings cannot reuse an id another heading on the page
+already has; leave `data-id`/`id` off new headings and Docmost assigns fresh ones.
+Mentions follow the same rule as `update_page` (see below).
 
 ## MCP tools
 
@@ -196,8 +200,12 @@ refused unless `DOCMOST_ALLOW_UNTESTED_VERSION=1`. If Docmost cannot report its 
 - **Silent content drops.** If the server runs with `COLLAB_DISABLE_REDIS=true`, Docmost
   accepts content updates without applying them. The client detects this for `append`
   and `prepend`.
-- **Mentions are not written.** Content containing mention nodes is rejected, because
-  mentions notify users.
+- **No new mentions.** Docmost notifies a user (in the app and by email) when a save
+  adds a mention of someone who was not mentioned before. `update_page` and
+  `edit_section` therefore keep mentions already on the page, matched by user or page id,
+  and reject any other mention, so editing a page round-trip never notifies anyone.
+  `create_page` rejects all mentions. Markdown drops mentions when reading, so edit pages
+  with mentions as html or json.
 - **Live editing.** What a `replace` does to text a user is typing at that moment has
   not been observed yet.
 

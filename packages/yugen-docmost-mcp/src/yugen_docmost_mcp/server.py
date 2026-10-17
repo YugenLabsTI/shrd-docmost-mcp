@@ -555,7 +555,7 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
             outline = await reader.get_page_outline(page_id)
         except DocmostError as exc:
             return SectionCheck(status="precheck_failed", error=exc)
-        wait = busy_retry_after(outline.updated_at)
+        wait = busy_retry_after(outline.updated_at, reader.server_now())
         if wait is not None:
             return SectionCheck(status="busy", retry_after=wait)
         if not confirm_replace:
@@ -739,7 +739,8 @@ def _register_write_tools(
             "outline's updated_at. operation: replace swaps the section body (subsections "
             "included, the heading stays), prepend inserts right after the heading, append "
             "inserts at the end of the section. content is HTML (e.g. <p>, <ul>, <table>); "
-            "it must be well-formed and cannot contain mentions. Docmost can only save whole "
+            "it must be well-formed and may keep mentions already on the page but not add "
+            "new ones (they notify people). Docmost can only save whole "
             "pages, so if the page was saved in the last minute the call fails with "
             "PAGE_BUSY (wait retry_after_seconds and retry), and otherwise the user may be "
             "asked to confirm. Returns the page as stored (html). "
@@ -764,8 +765,9 @@ def _register_write_tools(
             "safe with people editing; replace deletes the whole body first, including "
             "recent edits, so use it only when asked to rewrite. To replace a page with "
             "rich content, read it as html and send edited html; markdown would drop "
-            "comments, mentions, colors and diagrams. A replace may ask the user to confirm "
-            "first. Returns the page as stored. "
+            "comments, mentions, colors and diagrams. Content may keep mentions already on "
+            "the page but not add new ones (they notify people). A replace may ask the user "
+            "to confirm first. Returns the page as stored. "
             + _ERRORS
             + "STALE_PAGE (retryable after re-reading), CONFIRMATION_DECLINED, "
             "CONFIRMATION_UNAVAILABLE, READ_ONLY, FORBIDDEN (locked or not "

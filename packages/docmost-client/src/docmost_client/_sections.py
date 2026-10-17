@@ -26,6 +26,11 @@ _VOID = frozenset(
     }
 )  # fmt: skip
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+# Elements whose content Python's parser and Docmost's (happy-dom) may split differently.
+_RAW_TEXT = (
+    "script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes",
+    "noscript", "plaintext",
+)  # fmt: skip
 
 
 class _Block:
@@ -50,12 +55,17 @@ class _TopLevel(HTMLParser):
         self._open: tuple[int, str, dict[str, str | None]] | None = None
         self.blocks: list[_Block] = []
         self.broken = False
+        # Ids (data-id and id) of every heading at any depth, one set per heading.
+        self.heading_ids: list[set[str]] = []
+        self.element_ids: set[str] = set()
+        self.raw_text: str | None = None
 
     def _offset(self) -> int:
         line, column = self.getpos()
         return self._line_starts[line - 1] + column
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._note(tag, attrs)
         start = self._offset()
         if tag in _VOID:
             self._complete(start, start + len(self.get_starttag_text() or ""), tag, attrs)
@@ -67,6 +77,7 @@ class _TopLevel(HTMLParser):
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag not in _VOID:
             self.broken = True
+        self._note(tag, attrs)
         start = self._offset()
         self._complete(start, start + len(self.get_starttag_text() or ""), tag, attrs)
 
@@ -82,6 +93,14 @@ class _TopLevel(HTMLParser):
             end = self._html.index(">", self._offset()) + 1
             self.blocks.append(_Block(start, end, open_tag, attrs))
             self._open = None
+
+    def _note(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        ids = {value for name, value in attrs if name in ("data-id", "id") and value}
+        self.element_ids |= ids
+        if tag in _HEADINGS:
+            self.heading_ids.append(ids)
+        if tag in _RAW_TEXT and self.raw_text is None:
+            self.raw_text = tag
 
     def handle_data(self, data: str) -> None:
         if "<" in data:
@@ -135,7 +154,13 @@ def splice_section(html: str, heading_id: str, operation: SectionOperation, new_
         raise InvalidRequestError(
             "The page HTML could not be split into blocks; edit it with update_page instead."
         )
-    if not _parse(new_html).well_formed:
+    new = _parse(new_html)
+    if new.raw_text is not None:
+        raise InvalidRequestError(
+            f"content cannot contain <{new.raw_text}> elements; Docmost does not keep them and "
+            "may parse their content differently."
+        )
+    if not new.well_formed:
         raise InvalidRequestError(
             "content is not well-formed HTML: close and nest every element, write < as &lt; "
             "in text, and do not use comments or self-closed elements such as <div/>."
@@ -152,10 +177,15 @@ def splice_section(html: str, heading_id: str, operation: SectionOperation, new_
         None,
     )
     if index is None:
-        if f'data-id="{heading_id}"' in html:
+        if any(heading_id in ids for ids in page.heading_ids):
             raise NotFoundError(
                 "That heading is inside another block; only top-level headings can be "
                 "edited as sections."
+            )
+        if heading_id in page.element_ids:
+            raise NotFoundError(
+                "That id belongs to a block that is not a heading; use a heading id from "
+                "the page outline."
             )
         raise NotFoundError("No heading with that id; read the page outline again.")
 
@@ -170,7 +200,24 @@ def splice_section(html: str, heading_id: str, operation: SectionOperation, new_
     section_end = next_heading.start if next_heading is not None else blocks[-1].end
 
     if operation == "prepend":
-        return html[: heading.end] + new_html + html[heading.end :]
-    if operation == "append":
-        return html[:section_end] + new_html + html[section_end:]
-    return html[: heading.end] + new_html + html[section_end:]
+        result = html[: heading.end] + new_html + html[heading.end :]
+    elif operation == "append":
+        result = html[:section_end] + new_html + html[section_end:]
+    else:
+        result = html[: heading.end] + new_html + html[section_end:]
+    _check_unique_heading_ids(new, result)
+    return result
+
+
+def _check_unique_heading_ids(new: _TopLevel, result: str) -> None:
+    """Docmost stores node ids as sent, and sections are addressed by heading id."""
+    new_ids = set[str]().union(*new.heading_ids)
+    if not new_ids:
+        return
+    headings = _parse(result).heading_ids
+    if any(sum(value in ids for ids in headings) > 1 for value in new_ids):
+        raise InvalidRequestError(
+            "content reuses a heading id that another heading on the page already has; "
+            "remove the data-id and id attributes from new headings and Docmost will assign "
+            "fresh ones."
+        )
