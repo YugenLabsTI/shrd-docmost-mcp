@@ -59,6 +59,8 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_ALLOW_UNTESTED_VERSION` | `0` | Connect to a Docmost version not in the compatibility matrix. |
 | `DOCMOST_TIMEOUT_SECONDS` | `30` | Per-request timeout. |
 | `DOCMOST_MAX_CONTENT_BYTES` | `1000000` | Largest content a write may send (encoded size). |
+| `DOCMOST_BUILTIN_PROMPTS` | `1` | Offer the generic `summarize_page` and `answer_from_wiki` prompts. `0` hides them. |
+| `DOCMOST_PROMPTS_DIR` | unset | Directory of team prompt files (`*.toml`, see [MCP prompts](#mcp-prompts)). |
 | `DOCMOST_BUSY_WINDOW_SECONDS` | `60` | `edit_section` refuses pages saved this recently (`PAGE_BUSY`). From `45` (Docmost's editor save delay) to `86400`. |
 
 The account must log in with email and password: accounts that require MFA or SSO are
@@ -182,6 +184,41 @@ read-only mode too, and respect `DOCMOST_ALLOWED_SPACES`.
 | `docmost://recent` | The 50 most recently updated pages in the allowed spaces. |
 
 A failed read returns the same error codes as the tools (for example `SPACE_NOT_ALLOWED`).
+
+## MCP prompts
+
+Prompts are reusable instructions a user picks in the MCP host. The server ships two
+generic ones, `summarize_page(page_id)` and `answer_from_wiki(question, space?)` (search,
+read and answer citing pages), which `DOCMOST_BUILTIN_PROMPTS=0` hides.
+
+Team workflows belong in configuration, not in this server: point `DOCMOST_PROMPTS_DIR`
+at a directory with one `.toml` file per prompt.
+
+```toml
+name = "weekly_report"                       # lowercase letters, digits, "_" or "-"
+title = "Draft the weekly report"            # optional
+description = "Draft the weekly report page" # optional
+template = """
+Read the recent pages in {{space}} and draft ...
+"""
+
+[[arguments]]
+name = "space"
+description = "Space slug or id."  # optional
+required = true                    # default false
+
+[[arguments]]
+name = "tone"
+default = "neutral"                # optional arguments only
+```
+
+- `{{argument}}` is replaced by the argument's value (or its `default`, or nothing). Only
+  declared arguments can appear, values are inserted verbatim in one pass, and nothing
+  in the template is evaluated.
+- Only `*.toml` files directly inside the directory are read, at most 100 of 64 KiB
+  each. Any invalid file, duplicate name or a name that clashes with a built-in prompt
+  stops the server at startup with an error naming the file (never its template).
+- [`examples/prompts/`](examples/prompts) has a complete example.
 
 ## Security model
 
