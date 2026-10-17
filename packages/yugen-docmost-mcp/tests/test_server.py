@@ -1254,3 +1254,41 @@ async def test_a_write_that_cannot_be_audited_is_refused(
 
     assert result.structured_content["error"]["code"] == "AUDIT_UNAVAILABLE"
     assert not any(name == "create_page" for name, _ in wiki.calls)
+
+
+async def test_audit_summary_exists_only_when_exposed(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+
+    async with Client(build_server(wiki, writer=wiki, audit=audit)) as client:
+        hidden = {t.name for t in (await client.list_tools()).tools}
+    async with Client(build_server(wiki, writer=wiki, audit=audit, expose_audit=True)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+
+    assert "audit_summary" not in hidden
+    assert tools["audit_summary"].annotations.read_only_hint is True  # type: ignore[union-attr]
+
+
+async def test_audit_summary_reports_recent_activity(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = build_server(wiki, writer=wiki, audit=audit, expose_audit=True)
+
+    await call(server, "create_page", space="engineering", title="x")
+    await _replace(server, decline)
+    result = await call(server, "audit_summary", since_hours=24)
+
+    summary = result.structured_content
+    assert result.is_error is False
+    assert summary["calls"] == 2
+    assert summary["by_tool"]["create_page"] == {"ok": 1, "error": 0}
+    assert summary["errors_by_code"] == {"CONFIRMATION_DECLINED": 1}
+    assert summary["pages_written"] == ["p1"]
+
+
+async def test_audit_summary_reports_an_unreadable_log(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = build_server(wiki, writer=None, audit=audit, expose_audit=True)
+    (tmp_path / "audit.jsonl").unlink()
+
+    result = await call(server, "audit_summary")
+
+    assert result.structured_content["error"]["code"] == "AUDIT_UNAVAILABLE"

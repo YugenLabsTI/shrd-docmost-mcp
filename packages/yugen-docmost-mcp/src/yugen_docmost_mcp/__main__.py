@@ -40,6 +40,7 @@ def create_server(
     confirm_replace: bool = True,
     prompts: Sequence[PromptSpec] = BUILTIN_PROMPTS,
     audit: AuditLog | None = None,
+    expose_audit: bool = False,
 ) -> MCPServer[Any]:
     """Build the server for ``settings`` with ``prompts`` (see ``prompts_from_env``).
 
@@ -56,8 +57,18 @@ def create_server(
         confirm_replace=confirm_replace,
         prompts=prompts,
         audit=audit,
+        expose_audit=expose_audit,
         on_shutdown=client.aclose,
     )
+
+
+def audit_from_env(environ: Mapping[str, str] | None = None) -> tuple[AuditLog | None, bool]:
+    """The audit log (or None) and whether ``audit_summary`` is exposed; ConfigError."""
+    audit_settings = audit_settings_from_env(environ)
+    if audit_settings.path is None:
+        return None, False
+    audit = AuditLog.open(audit_settings.path, reads=audit_settings.reads)
+    return audit, audit_settings.expose
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -74,18 +85,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         settings = DocmostSettings.from_env()
         confirm_replace = confirm_replace_from_env()
         prompts = prompts_from_env()
-        audit_settings = audit_settings_from_env()
-        audit = (
-            AuditLog.open(audit_settings.path, reads=audit_settings.reads)
-            if audit_settings.path is not None
-            else None
-        )
+        audit, expose_audit = audit_from_env()
     except ConfigError as exc:
         sys.stderr.write(f"yugen-docmost-mcp: {exc}\n")
         raise SystemExit(2) from None
-    create_server(settings, confirm_replace=confirm_replace, prompts=prompts, audit=audit).run(
-        "stdio"
-    )
+    create_server(
+        settings,
+        confirm_replace=confirm_replace,
+        prompts=prompts,
+        audit=audit,
+        expose_audit=expose_audit,
+    ).run("stdio")
 
 
 def audit_command(argv: Sequence[str]) -> int:

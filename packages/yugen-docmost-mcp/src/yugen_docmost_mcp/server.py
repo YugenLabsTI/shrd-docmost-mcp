@@ -1,5 +1,6 @@
 """MCP server wiring: tool registration, error mapping, and the compatibility gate."""
 
+import dataclasses
 import functools
 import json
 import logging
@@ -7,6 +8,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, ParamSpec, TypeVar, cast
 
 import anyio
@@ -23,12 +25,17 @@ from docmost_client import (
 )
 from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS
 from yugen_docmost_mcp._version import __version__
-from yugen_docmost_mcp.audit import WRITE_TOOLS, AuditLog
-from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
+from yugen_docmost_mcp.audit import WRITE_TOOLS, AuditLog, read_events, summarize
+from yugen_docmost_mcp.errors import (
+    AuditUnavailableError,
+    ConfirmationDeclinedError,
+    ConfirmationUnavailableError,
+)
 from yugen_docmost_mcp.ports import WikiCommenter, WikiMover, WikiReader, WikiWriter
 from yugen_docmost_mcp.prompts import BUILTIN_PROMPTS, PromptSpec, register_prompts
 from yugen_docmost_mcp.resources import register_resources
 from yugen_docmost_mcp.results import (
+    AuditSummaryResult,
     ChildItem,
     ChildrenResult,
     CommentItem,
@@ -167,6 +174,7 @@ def build_server(
     commenter: WikiCommenter | None = None,
     mover: WikiMover | None = None,
     audit: AuditLog | None = None,
+    expose_audit: bool = False,
     confirm_replace: bool = True,
     prompts: Sequence[PromptSpec] = BUILTIN_PROMPTS,
     on_shutdown: Callable[[], Awaitable[None]] | None = None,
@@ -210,6 +218,8 @@ def build_server(
         _register_write_tools(server, writer, reader, gate, confirm_replace)
     if mover is not None:
         _register_move_tool(server, mover, gate)
+    if audit is not None and expose_audit:
+        _register_audit_tool(server, audit, gate)
     return server
 
 
@@ -546,6 +556,40 @@ def _quoted(value: str, limit: int = 60) -> str:
     """Show agent-supplied text safely inside a question to the user: one line, bounded."""
     flat = " ".join("".join(ch if ch.isprintable() else " " for ch in value).split())
     return f'"{flat if len(flat) <= limit else flat[: limit - 1] + "…"}"'
+
+
+def _register_audit_tool(server: MCPServer[Any], audit: AuditLog, gate: ToolGuard) -> None:
+    async def audit_summary(
+        since_hours: Annotated[
+            int, Field(ge=1, le=8760, description="How far back to look, in hours (1-8760).")
+        ] = 24,
+    ) -> AuditSummaryResult:
+        since = datetime.now(UTC) - timedelta(hours=since_hours)
+
+        def read() -> AuditSummaryResult:
+            return AuditSummaryResult.model_validate(
+                dataclasses.asdict(summarize(read_events(audit.path, since)))
+            )
+
+        try:
+            return await anyio.to_thread.run_sync(read)
+        except OSError:
+            raise AuditUnavailableError("The audit log cannot be read right now.") from None
+
+    server.add_tool(
+        _guarded(gate, audit_summary),
+        name="audit_summary",
+        title="Summarize this server's audit log",
+        description=(
+            "Summarize what this server recorded in its audit log over the last since_hours: "
+            "calls per tool with ok/error counts, errors and refusals by code (for example "
+            "CONFIRMATION_DECLINED or PAGE_BUSY), spaces, pages written or refused, and calls "
+            "that never finished. It holds ids and outcomes only, never page content; read "
+            "pages with get_page to describe them. " + _ERRORS + "AUDIT_UNAVAILABLE, INVALID_INPUT."
+        ),
+        annotations=_READ,
+        structured_output=True,
+    )
 
 
 def _register_move_tool(server: MCPServer[Any], mover: WikiMover, gate: ToolGuard) -> None:

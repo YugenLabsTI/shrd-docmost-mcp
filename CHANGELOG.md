@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Audit log
+
+- `DOCMOST_AUDIT_LOG` records every write, comment, move and refused attempt (and reads
+  with `DOCMOST_AUDIT_READS=1`) as JSON lines with ids, outcome and error code, never
+  content; writes fail closed with the new `AUDIT_UNAVAILABLE` code.
+- `yugen-docmost-mcp audit report [--since 7d] [--json] [--file PATH]` summarizes it for
+  operators.
+- `audit_summary` (read-only tool) lets the agent summarize its own activity, only with
+  `DOCMOST_AUDIT_EXPOSE=1`.
+
 ### Moving pages
 
 - `move_page` (behind `DOCMOST_ALLOW_MOVE`, off by default, on top of
