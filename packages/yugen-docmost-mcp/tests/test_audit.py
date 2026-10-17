@@ -248,3 +248,55 @@ def test_summary_counts_outcomes_refusals_pages_and_interrupted_calls(tmp_path: 
     assert summary.interrupted == [{"call": "c4", "tool": "move_page", "ts": NOW.isoformat()}]
     assert summary.first == NOW.isoformat()
     assert summary.last == NOW.isoformat()
+
+
+def test_unicode_format_and_control_characters_are_removed(tmp_path: Path) -> None:
+    audit = log(tmp_path)
+
+    audit.started("c1", "add_comment", {"page_id": "p\u202eevil\u009b\u2028x\u200by"})
+
+    assert lines(tmp_path / "audit.jsonl")[0]["args"]["page_id"] == "p evil  x y"
+
+
+def test_unencodable_values_are_still_recorded(tmp_path: Path) -> None:
+    audit = log(tmp_path)
+
+    audit.started("c1", "add_comment", {"page_id": "p\ud800"})
+
+    assert len(lines(tmp_path / "audit.jsonl")) == 1
+
+
+def test_summary_tolerates_hand_edited_lines(tmp_path: Path) -> None:
+    path = write_log(
+        tmp_path / "a.jsonl",
+        event("finished", "create_page", "c1", outcome="ok", args=["not", "a", "dict"]),
+        event("finished", "update_page", "c2", outcome="error", code=7, args="x"),
+    )
+
+    summary = summarize(read_events(path, since=None))
+
+    assert summary.calls == 2
+    assert summary.errors_by_code == {"7": 1}
+
+
+def test_short_writes_are_completed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    audit = log(tmp_path)
+    real_write = os.write
+
+    def one_byte_at_a_time(fd: int, data: bytes) -> int:
+        return real_write(fd, data[:1])
+
+    monkeypatch.setattr("yugen_docmost_mcp.audit.os.write", one_byte_at_a_time)
+    audit.started("c1", "create_page", {"space": "eng"})
+
+    assert lines(tmp_path / "audit.jsonl")[0]["args"] == {"space": "eng"}
+
+
+def test_a_write_that_makes_no_progress_refuses_the_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audit = log(tmp_path)
+    monkeypatch.setattr("yugen_docmost_mcp.audit.os.write", lambda fd, data: 0)
+
+    with pytest.raises(AuditUnavailableError):
+        audit.started("c1", "create_page", {})
