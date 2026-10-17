@@ -59,6 +59,7 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_ALLOW_UNTESTED_VERSION` | `0` | Connect to a Docmost version not in the compatibility matrix. |
 | `DOCMOST_TIMEOUT_SECONDS` | `30` | Per-request timeout. |
 | `DOCMOST_MAX_CONTENT_BYTES` | `1000000` | Largest content a write may send (encoded size). |
+| `DOCMOST_BUSY_WINDOW_SECONDS` | `60` | `edit_section` refuses pages saved this recently (`PAGE_BUSY`). From `45` (Docmost's editor save delay) to `86400`. |
 
 The account must log in with email and password: accounts that require MFA or SSO are
 not supported.
@@ -110,11 +111,18 @@ Docmost can only save whole pages, so the server splices the section into the pa
 HTML and writes the whole page back. Edits someone is typing in the browser are saved
 up to ~45 s late and would be lost, so two protections apply:
 
-1. if the page was saved in the last 60 seconds, the call fails with `PAGE_BUSY`
-   (retryable, with `retry_after_seconds`) before anything is asked. The window is
-   measured on the earlier of Docmost's clock (from the `Date` header of its
-   responses) and the local one, so a skewed clock on either side cannot shorten it;
+1. if the page was saved in the last 60 seconds (`DOCMOST_BUSY_WINDOW_SECONDS`), the
+   call fails with `PAGE_BUSY` (retryable, with `retry_after_seconds`) before anything
+   is asked. The window is measured on the earlier of Docmost's clock (from the `Date`
+   header of its successful responses) and the local one, so a small skew on either
+   side cannot shorten it. Time zones do not matter (both are absolute instants); when
+   the two clocks differ by more than 5 minutes one of them is wrong, and section edits
+   fail with `CLOCK_SKEW` until an operator fixes the time synchronization;
 2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
+
+The window only sees edits Docmost has already saved. Someone typing right now on a page
+last saved long ago is not detected (Docmost does not expose who has a page open), so
+the confirmation is what protects that case.
 
 Only top-level headings can be targeted (not headings inside columns, callouts or
 collapsible blocks). New content must be well-formed HTML: every element closed and
@@ -146,7 +154,7 @@ Failures return `is_error: true` with
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
 `READ_ONLY`, `COMMENTS_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
-`PAGE_BUSY`,
+`PAGE_BUSY`, `CLOCK_SKEW`,
 `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
 `UNSUPPORTED_VERSION`. Invalid configuration stops the server at startup with a message

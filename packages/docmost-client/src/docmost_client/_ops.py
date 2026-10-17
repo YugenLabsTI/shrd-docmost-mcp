@@ -25,6 +25,7 @@ from docmost_client._content import (
 )
 from docmost_client._sections import SECTION_OPERATIONS, SectionOperation, splice_section
 from docmost_client.errors import (
+    ClockSkewError,
     CommentsDisabledError,
     DocmostError,
     InvalidRequestError,
@@ -54,7 +55,7 @@ from docmost_client.models import (
     Space,
 )
 from docmost_client.policy import SpaceAllowlist
-from docmost_client.settings import DocmostSettings
+from docmost_client.settings import DEFAULT_BUSY_WINDOW_SECONDS, DocmostSettings
 
 T = TypeVar("T")
 M = TypeVar("M", Space, PageSummary, RecentPage, Comment)
@@ -412,25 +413,42 @@ def update_page(
 
 # Docmost persists editor changes up to ~45 s late; a page saved within this window may
 # be open in someone's editor with unsaved edits that a whole-page rewrite would discard.
-BUSY_WINDOW = timedelta(seconds=60)
+BUSY_WINDOW = timedelta(seconds=DEFAULT_BUSY_WINDOW_SECONDS)
+# Beyond this, Docmost's clock or the local one is wrong (a misconfigured host or proxy;
+# time zones do not matter, both are absolute instants) and section edits are refused.
+MAX_CLOCK_SKEW = timedelta(minutes=5)
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def busy_retry_after(updated_at: datetime, now: datetime | None = None) -> int | None:
+def busy_retry_after(
+    updated_at: datetime, now: datetime | None = None, window: timedelta = BUSY_WINDOW
+) -> int | None:
     """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
 
-    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of it
-    and the local clock is used, so a wrong clock on either side can only make the
-    window longer, never switch it off.
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of
+    it and the local clock is used, so a small skew on either side only lengthens the
+    window. Raises ClockSkewError when the two differ by more than MAX_CLOCK_SKEW.
     """
     local = _utcnow()
-    age = (local if now is None else min(now, local)) - updated_at
-    if age >= BUSY_WINDOW:
+    current = local
+    if now is not None:
+        skew = abs(now - local)
+        if skew > MAX_CLOCK_SKEW:
+            minutes = round(skew.total_seconds() / 60)
+            raise ClockSkewError(
+                f"Docmost's clock and this machine's clock differ by about {minutes} "
+                "minutes, so the client cannot tell whether the page was saved moments ago. "
+                "Section edits are refused until the clocks agree: check time "
+                "synchronization (NTP) on both hosts and the Date header of any proxy."
+            )
+        current = min(now, local)
+    age = current - updated_at
+    if age >= window:
         return None
-    return int((BUSY_WINDOW - age).total_seconds()) + 1
+    return int((window - age).total_seconds()) + 1
 
 
 def edit_section(
@@ -468,7 +486,8 @@ def edit_section(
             current_updated_at=current.updated_at,
         )
     # Read the clock after the page read, so it reflects that response's Date header.
-    wait = busy_retry_after(current.updated_at, clock())
+    window = timedelta(seconds=settings.busy_window_seconds)
+    wait = busy_retry_after(current.updated_at, clock(), window)
     if wait is not None:
         raise page_busy(wait)
 
@@ -485,8 +504,8 @@ def edit_section(
 
 def page_busy(wait: int) -> PageBusyError:
     return PageBusyError(
-        "The page was saved less than a minute ago and may be open in someone's editor "
-        f"with unsaved changes. Try again in about {wait} seconds.",
+        "The page was saved too recently and may be open in someone's editor with unsaved "
+        f"changes. Try again in about {wait} seconds.",
         retry_after_seconds=wait,
     )
 

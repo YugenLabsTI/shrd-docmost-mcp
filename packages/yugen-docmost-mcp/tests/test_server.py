@@ -190,8 +190,8 @@ class FakeWiki:
             created_at=UPDATED_AT,
         )
 
-    def server_now(self) -> datetime:
-        return self.server_time or docmost_client._ops._utcnow()  # pyright: ignore[reportPrivateUsage]
+    def busy_retry_after(self, updated_at: datetime) -> int | None:
+        return docmost_client.busy_retry_after(updated_at, self.server_time)
 
     async def get_page_outline(self, page_id: str) -> PageOutline:
         self._record("get_page_outline", page_id=page_id)
@@ -910,9 +910,10 @@ async def test_callers_cannot_supply_the_section_gate(
 
 
 async def test_the_busy_check_before_asking_uses_docmost_s_clock(
-    wiki: FakeWiki, accept: Asker, quiet: None
+    wiki: FakeWiki, accept: Asker, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Locally ten minutes passed (quiet); Docmost's clock says the save was 20 s ago.
+    # Locally 90 seconds passed (quiet); Docmost's clock says the save was 20 s ago.
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     wiki.server_time = UPDATED_AT + timedelta(seconds=20)
 
     result = await _section(build_server(wiki, writer=wiki), accept)
@@ -920,3 +921,17 @@ async def test_the_busy_check_before_asking_uses_docmost_s_clock(
     assert result.structured_content["error"]["code"] == "PAGE_BUSY"
     assert result.structured_content["error"]["retry_after_seconds"] == 41
     assert accept.asked == []
+
+
+async def test_skewed_clocks_refuse_a_section_edit_before_asking(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    wiki.server_time = UPDATED_AT - timedelta(days=365)
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    error = result.structured_content["error"]
+    assert error["code"] == "CLOCK_SKEW"
+    assert error["retryable"] is False
+    assert accept.asked == []
+    assert not any(name == "edit_section" for name, _ in wiki.calls)

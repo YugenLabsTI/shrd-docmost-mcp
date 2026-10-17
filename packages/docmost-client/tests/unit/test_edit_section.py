@@ -12,6 +12,7 @@ import respx
 
 from docmost_client import (
     AsyncDocmostClient,
+    ClockSkewError,
     DocmostClient,
     DocmostSettings,
     InvalidRequestError,
@@ -254,8 +255,11 @@ def dated(data: Any, date: str) -> httpx.Response:
     )
 
 
-def test_the_busy_window_uses_docmost_s_clock(client: DocmostClient, api: respx.MockRouter) -> None:
-    # The local clock says ten minutes passed (quiet_page); Docmost's says 20 seconds.
+def test_the_busy_window_uses_docmost_s_clock(
+    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The local clock says 90 seconds passed; Docmost's says 20 seconds.
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
 
     with pytest.raises(PageBusyError) as exc:
@@ -266,19 +270,12 @@ def test_the_busy_window_uses_docmost_s_clock(client: DocmostClient, api: respx.
     assert api.routes["update"].call_count == 0
 
 
-@pytest.mark.parametrize(
-    "date",
-    [
-        "Fri, 16 Oct 2026 10:10:00 GMT",
-        # A wrong Date (e.g. from a proxy) must not switch the protection off.
-        "Thu, 01 Jan 2099 00:00:00 GMT",
-    ],
-)
 def test_whichever_clock_says_the_page_is_busy_wins(
-    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch, date: str
+    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Docmost's clock says three minutes passed; the local one only five seconds.
     monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=5))
-    api.routes["info"].mock(return_value=dated(page(), date))
+    api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:03:00 GMT"))
 
     with pytest.raises(PageBusyError):
         edit(client)
@@ -301,7 +298,10 @@ def test_server_now_falls_back_to_the_local_clock(client: DocmostClient) -> None
 
 
 @pytest.mark.anyio
-async def test_async_client_uses_docmost_s_clock(api: respx.MockRouter) -> None:
+async def test_async_client_uses_docmost_s_clock(
+    api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
 
     async with AsyncDocmostClient(settings()) as client:
@@ -314,3 +314,63 @@ async def test_async_client_uses_docmost_s_clock(api: respx.MockRouter) -> None:
                 expected_updated_at=UPDATED_AT,
             )
         assert client.server_now() >= datetime(2026, 10, 16, 10, 0, 20, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("local_offset", "date"),
+    [
+        # Docmost's clock years in the past (e.g. a broken proxy's Date header).
+        (timedelta(minutes=10), "Wed, 01 Jan 2020 00:00:00 GMT"),
+        # Docmost's clock in the future.
+        (timedelta(seconds=5), "Thu, 01 Jan 2099 00:00:00 GMT"),
+        # The local clock a day ahead of a correct Docmost clock.
+        (timedelta(days=1), "Fri, 16 Oct 2026 10:00:20 GMT"),
+    ],
+)
+def test_clocks_skewed_by_more_than_five_minutes_refuse_the_edit(
+    client: DocmostClient,
+    api: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    local_offset: timedelta,
+    date: str,
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + local_offset)
+    api.routes["info"].mock(return_value=dated(page(), date))
+
+    with pytest.raises(ClockSkewError, match="clock") as exc:
+        edit(client)
+
+    assert exc.value.code == "CLOCK_SKEW"
+    assert api.routes["update"].call_count == 0
+
+
+def test_a_skew_of_exactly_five_minutes_is_tolerated(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    # Local clock: ten minutes after the save (quiet_page); Docmost's: five minutes after.
+    api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:05:00 GMT"))
+
+    edit(client)
+
+    assert api.routes["update"].call_count == 1
+
+
+def test_the_busy_window_follows_the_settings(
+    api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
+
+    with (
+        DocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="120")) as client,
+        pytest.raises(PageBusyError, match="31 seconds"),
+    ):
+        edit(client)
+
+    assert api.routes["update"].call_count == 0
+
+
+def test_client_busy_retry_after_uses_its_window(api: respx.MockRouter) -> None:
+    del api
+    with DocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="900")) as client:
+        assert client.busy_retry_after(UPDATED_AT) == 301
+        assert client.busy_retry_after(UPDATED_AT - timedelta(hours=1)) is None

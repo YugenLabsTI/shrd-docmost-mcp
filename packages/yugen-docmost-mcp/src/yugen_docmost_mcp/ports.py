@@ -37,8 +37,8 @@ class WikiReader(Protocol):
 
     async def get_page_outline(self, page_id: str) -> PageOutline: ...
 
-    def server_now(self) -> datetime:
-        """Docmost's current time (from its latest response), else the local clock."""
+    def busy_retry_after(self, updated_at: datetime) -> int | None:
+        """Seconds until a page saved at ``updated_at`` may be rewritten, or None if now."""
         ...
 
     async def list_children(

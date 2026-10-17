@@ -102,6 +102,16 @@ class CommentsDisabledError(DocmostError):
     code: ClassVar[str] = "COMMENTS_DISABLED"
 
 
+class ClockSkewError(DocmostError):
+    """Docmost's clock and the local clock disagree by more than a few minutes.
+
+    Section edits refuse to run until the clocks are fixed: with either clock wrong, the
+    client cannot tell whether a page was saved moments ago.
+    """
+
+    code: ClassVar[str] = "CLOCK_SKEW"
+
+
 class PageBusyError(DocmostError):
     """The page was saved moments ago: someone may be editing it right now.
 

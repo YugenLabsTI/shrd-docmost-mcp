@@ -6,6 +6,7 @@ from docmost_client.client import AsyncDocmostClient, DocmostClient
 from docmost_client.compat import SUPPORTED_DOCMOST_VERSIONS
 from docmost_client.errors import (
     AuthenticationError,
+    ClockSkewError,
     CommentsDisabledError,
     ConfigError,
     DocmostError,
@@ -50,6 +51,7 @@ __all__ = [
     "AsyncDocmostClient",
     "AsyncSession",
     "AuthenticationError",
+    "ClockSkewError",
     "Comment",
     "CommentsDisabledError",
     "CompatibilityReport",

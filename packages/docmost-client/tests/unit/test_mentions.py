@@ -10,7 +10,13 @@ import httpx
 import pytest
 import respx
 
-from docmost_client import DocmostClient, DocmostSettings, InvalidRequestError, _ops
+from docmost_client import (
+    DocmostClient,
+    DocmostSettings,
+    InvalidRequestError,
+    NotFoundError,
+    _ops,
+)
 
 BASE = "https://wiki.example.com"
 API = f"{BASE}/api"
@@ -259,4 +265,23 @@ def test_page_mentions_without_a_node_id_do_not_count(
             PAGE_ID, content=doc(mention_json(BO, "Bo")), operation="replace", format="json"
         )
 
+    assert api.routes["update"].call_count == 0
+
+
+def test_a_failed_json_read_for_markdown_mentions_writes_nothing(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.read())["format"] == "json":
+            return httpx.Response(404, json={"message": "Page not found", "statusCode": 404})
+        return wrapped(page("Ask @Ana."))
+
+    api.post(f"{API}/pages/info", name="info").mock(side_effect=respond)
+
+    with pytest.raises(NotFoundError):
+        client.update_page(
+            PAGE_ID, content=f"Ask {mention_html(ANA)}", operation="append", format="markdown"
+        )
+
+    assert [body(api.routes["info"], i)["format"] for i in range(2)] == ["markdown", "json"]
     assert api.routes["update"].call_count == 0
