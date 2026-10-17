@@ -18,10 +18,10 @@ Assumptions (agent decisions): S1 compares mentions by `(entityType, entityId)` 
 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S1, S6 | inline | pending | |
-| T2 | S3, S4, S5, S6 | inline | pending | |
-| T3 | S2, S6 | inline | pending | |
-| T4 | S1-S6 | inline | pending | |
+| T1 | S1, S6 | inline | done (verifier pending) | L3; commit `65c54d0` |
+| T2 | S3, S4, S5, S6 | inline | done (verifier pending) | L4; commit `fba9de0` |
+| T3 | S2, S6 | inline | done (verifier pending) | L5; commit `4ea4bfb` |
+| T4 | S1-S6 | inline | done (verifier pending) | L6; commit `02dda68` |
 
 T1 client mention guard that allows mentions already on the page (update_page, edit_section). T2 splicer: duplicate heading ids, NOT_FOUND messages, raw-text elements. T3 server clock from the `Date` header in the sessions, used by the client busy check and the MCP resolver. T4 docs (README, SECURITY, CHANGELOG) and an integration test of the mention round-trip against the local Docmost.
 
@@ -31,3 +31,7 @@ High-risk: T1 (relaxes a security guard), T3 (changes the busy protection). Inde
 
 - **L1 (2026-10-17, user, verbatim):** "Vale, entonces continuemos!" — continuing the roadmap's first item: the section-editing review follow-ups and the update_page mention round-trip limitation.
 - **L2 (2026-10-17, evidence, local Docmost 0.96.0 source, read-only):** REST `pages/update` goes through hocuspocus `PersistenceExtension.onStoreDocument`, the same path as editor saves. `PageNotificationService.processPageMention` notifies only user mentions whose user was not mentioned in the previously saved content (and not self-mentions); identical content stores and notifies nothing. Mention HTML: `span[data-type="mention"]` with `data-id`, `data-label`, `data-entity-type`, `data-entity-id`, `data-slug-id`, `data-creator-id`, `data-anchor-id`; JSON attrs `id`, `label`, `entityType`, `entityId`, `slugId`, `creatorId`, `anchorId`. The server never deduplicates node ids (`addUniqueIdsToDoc` fills only missing ids). Docmost sends an HTTP `Date` header (1 s resolution); the client drops all headers except `set-cookie` in `_protocol.unwrap`.
+- **L3 (2026-10-17, T1 evidence):** RED: 8 failed (mentions refused outright). GREEN: 394 passed; ruff, pyright clean. `_content.mention_keys` returns `(entityType, entityId)` per mention (json attrs; html/markdown via an HTMLParser collector on `data-type="mention"` elements, plus `None` for every regex match on entity-decoded text the parser did not see, and for mentions without an entity id); `check_mentions` refuses any key not on the page. `check_content(..., mentions="defer")` in `update_page` and `edit_section`; the existing page's mentions come from the same read (html/json) or one extra json read for markdown. `create_page` still refuses all mentions. Tool descriptions, README, SECURITY updated.
+- **L4 (2026-10-17, T2 evidence):** RED: 16 failed. GREEN: 412 passed. Parser records ids of every heading at any depth, all element ids, and the first raw-text element; new content with raw-text elements is refused (message names the tag); after splicing, a new heading id carried by more than one heading of the resulting page is refused; NOT_FOUND distinguishes nested heading / non-heading id / unknown (an id only present in text is unknown).
+- **L5 (2026-10-17, T3 evidence):** RED: ImportError + 4 failed (client), 1 failed (MCP). GREEN: 421 passed. `_protocol.ServerClock` anchors the latest `Date` header to `time.monotonic()`; sessions observe every response and expose `server_now()`; clients expose `server_now()` (local fallback); `edit_section` op reads the clock after its page read; MCP resolver passes `reader.server_now()` (port `WikiReader.server_now`). The estimate lags the server (1 s resolution, transit time), which errs toward refusing.
+- **L6 (2026-10-17, T4 evidence):** integration tests that pretended time passed by patching the local clock failed against the real Docmost (PAGE_BUSY "about 61 seconds"), proving the server clock is used; they now patch `ServerClock.now`. New `test_pages_with_mentions_round_trip_without_new_mentions` (seeds a self-mention through the raw session, html round-trip keeps it, a stranger's mention is refused with no write). Integration 22 passed (one earlier failure came from runs in the same minute, login rate limit); default suite 421 passed, 21 skipped.
