@@ -15,3 +15,9 @@ class ConfirmationDeclinedError(DocmostError):
     """The user declined or cancelled the confirmation for a replace."""
 
     code: ClassVar[str] = "CONFIRMATION_DECLINED"
+
+
+class AuditUnavailableError(DocmostError):
+    """The audit log is configured but this call could not be recorded, so it was refused."""
+
+    code: ClassVar[str] = "AUDIT_UNAVAILABLE"
