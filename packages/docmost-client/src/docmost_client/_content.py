@@ -102,6 +102,28 @@ def document_text(node: object) -> str:
     return ("" if inline else "\n").join(document_text(child) for child in items)
 
 
+def top_level_headings(document: object) -> list[tuple[str, int, str]]:
+    """(id, level, text) of the document's top-level headings that carry an id."""
+    if not isinstance(document, dict):
+        return []
+    blocks = cast(dict[str, Any], document).get("content")
+    if not isinstance(blocks, list):
+        return []
+    headings: list[tuple[str, int, str]] = []
+    for block in cast(list[object], blocks):
+        if not isinstance(block, dict):
+            continue
+        node = cast(dict[str, Any], block)
+        attrs = node.get("attrs")
+        if node.get("type") != "heading" or not isinstance(attrs, dict):
+            continue
+        values = cast(dict[str, Any], attrs)
+        heading_id, level = values.get("id"), values.get("level")
+        if isinstance(heading_id, str) and heading_id and isinstance(level, int):
+            headings.append((heading_id, level, document_text(node)))
+    return headings
+
+
 def check_size(content: object, max_bytes: int) -> None:
     size = _encoded_size(content)
     if size > max_bytes:
