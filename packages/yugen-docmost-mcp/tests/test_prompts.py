@@ -223,7 +223,7 @@ def test_duplicate_prompt_names_are_refused(tmp_path: Path) -> None:
 def test_a_file_cannot_replace_a_builtin_prompt(tmp_path: Path) -> None:
     write(tmp_path, "mine.toml", 'name = "summarize_page"\ntemplate = "x"')
 
-    with pytest.raises(ConfigError, match="summarize_page"):
+    with pytest.raises(ConfigError, match=r"summarize_page.*mine\.toml"):
         prompts_from_env({"DOCMOST_PROMPTS_DIR": str(tmp_path)})
     names = prompts_from_env({"DOCMOST_PROMPTS_DIR": str(tmp_path), "DOCMOST_BUILTIN_PROMPTS": "0"})
     assert [p.name for p in names] == ["summarize_page"]

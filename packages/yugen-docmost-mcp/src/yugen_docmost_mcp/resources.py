@@ -17,6 +17,7 @@ from yugen_docmost_mcp.ports import WikiReader
 MAX_TREE_PAGES = 200
 MAX_TREE_REQUESTS = 50
 MAX_RECENT_PAGES = 50
+_PAGE_SIZE = 100
 _MARKDOWN = "text/markdown"
 _TRUNCATED = "\n(truncated: the tree is larger than this view)\n"
 
@@ -67,9 +68,9 @@ def register_resources(
         mime_type=_MARKDOWN,
     )
     async def space_tree(space: str) -> str:
-        lines = await guarded(lambda: _walk_tree(reader, space))
-        text = f"# Pages in {space}\n\n" + "".join(f"{line}\n" for line in lines.lines)
-        return text + (_TRUNCATED if lines.truncated else "")
+        tree = await guarded(lambda: _walk_tree(reader, space))
+        text = f"# Pages in {space}\n\n" + "".join(f"{line}\n" for line in tree.lines)
+        return text + (_TRUNCATED if tree.truncated else "")
 
     @server.resource(
         "docmost://recent",
@@ -100,17 +101,19 @@ class _Tree:
 async def _walk_tree(reader: WikiReader, space: str) -> _Tree:
     tree = _Tree()
 
-    async def children(parent: str | None) -> list[PageSummary] | None:
+    async def children(parent: str | None) -> list[PageSummary]:
+        """The pages under ``parent``; stops (truncated) when the request budget is spent."""
         items: list[PageSummary] = []
         cursor: str | None = None
         while True:
             if tree.requests >= MAX_TREE_REQUESTS:
-                return None
+                tree.truncated = True
+                return items
             tree.requests += 1
             found = await reader.list_children(
                 space=space if parent is None else None,
                 parent_page_id=parent,
-                limit=100,
+                limit=_PAGE_SIZE,
                 cursor=cursor,
             )
             items.extend(found.items)
@@ -119,11 +122,7 @@ async def _walk_tree(reader: WikiReader, space: str) -> _Tree:
             cursor = found.next_cursor
 
     async def walk(parent: str | None, depth: int) -> None:
-        items = await children(parent)
-        if items is None:
-            tree.truncated = True
-            return
-        for item in items:
+        for item in await children(parent):
             if len(tree.lines) >= MAX_TREE_PAGES:
                 tree.truncated = True
                 return

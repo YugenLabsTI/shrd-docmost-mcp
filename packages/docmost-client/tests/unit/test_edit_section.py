@@ -374,3 +374,11 @@ def test_client_busy_retry_after_uses_its_window(api: respx.MockRouter) -> None:
     with DocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="900")) as client:
         assert client.busy_retry_after(UPDATED_AT) == 301
         assert client.busy_retry_after(UPDATED_AT - timedelta(hours=1)) is None
+
+
+@pytest.mark.anyio
+async def test_async_client_busy_retry_after_uses_its_window(api: respx.MockRouter) -> None:
+    del api
+    async with AsyncDocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="900")) as client:
+        assert client.busy_retry_after(UPDATED_AT) == 301
+        assert client.busy_retry_after(UPDATED_AT - timedelta(hours=1)) is None

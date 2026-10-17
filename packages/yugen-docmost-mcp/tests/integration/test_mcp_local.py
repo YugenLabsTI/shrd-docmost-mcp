@@ -233,7 +233,11 @@ async def test_resources_and_prompts_over_mcp() -> None:
     page_text = page.contents[0].text  # type: ignore[union-attr]
     assert page_text.startswith(f"# {title}\n")
     assert "Hello resources." in page_text
-    assert f"- {title} ({slug})" in tree.contents[0].text  # type: ignore[union-attr]
+    tree_text = tree.contents[0].text  # type: ignore[union-attr]
+    assert tree_text.startswith("# Pages in sandbox\n\n- ")
+    # Every run adds pages to sandbox; past 200 the tree is cut before the new one.
+    truncated = tree_text.rstrip().endswith("(truncated: the tree is larger than this view)")
+    assert truncated or f"- {title} ({slug})" in tree_text
     assert f"{title} ({slug}) in sandbox" in recent.contents[0].text  # type: ignore[union-attr]
     assert prompts == {"summarize_page", "answer_from_wiki"}
     assert slug in summary.messages[0].content.text  # type: ignore[union-attr]

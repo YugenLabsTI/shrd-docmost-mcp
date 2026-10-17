@@ -947,7 +947,7 @@ def summary(page_id: str, title: str, *, children: bool = False) -> PageSummary:
 
 
 class TreeWiki(FakeWiki):
-    """A space with nested pages: Guide > Install, plus FAQ."""
+    """A space whose pages are given by parent id (None for the root pages)."""
 
     def __init__(self, tree: dict[str | None, list[PageSummary]]) -> None:
         super().__init__()
@@ -1052,3 +1052,55 @@ async def test_resources_run_the_compatibility_gate_first(wiki: FakeWiki) -> Non
             await client.read_resource("docmost://recent")
 
     assert not any(name == "list_recent_pages" for name, _ in wiki.calls)
+
+
+class PagedWiki(TreeWiki):
+    """Root pages served one per request, following next cursors (``pages`` in total)."""
+
+    def __init__(self, pages: int) -> None:
+        super().__init__({})
+        self.pages = pages
+
+    async def list_children(
+        self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
+    ) -> Paginated[PageSummary]:
+        self._record("list_children", parent_page_id=parent_page_id, cursor=cursor)
+        index = int(cursor or 0)
+        more = index + 1 < self.pages
+        return Paginated[PageSummary](
+            items=[summary(f"p{index}", f"Page {index}")],
+            has_next_page=more,
+            next_cursor=str(index + 1) if more else None,
+        )
+
+
+async def test_space_tree_follows_next_cursors() -> None:
+    wiki = PagedWiki(pages=3)
+
+    text = await _read(build_server(wiki, writer=None), "docmost://space/engineering/tree")
+
+    assert text == (
+        "# Pages in engineering\n\n- Page 0 (p0-slug)\n- Page 1 (p1-slug)\n- Page 2 (p2-slug)\n"
+    )
+    assert [kw["cursor"] for name, kw in wiki.calls if name == "list_children"] == [None, "1", "2"]
+
+
+async def test_space_tree_keeps_pages_fetched_before_the_request_budget_ran_out() -> None:
+    wiki = PagedWiki(pages=1000)
+
+    text = await _read(build_server(wiki, writer=None), "docmost://space/engineering/tree")
+
+    assert text.count("\n- Page ") == 50
+    assert text.rstrip().endswith("(truncated: the tree is larger than this view)")
+    assert sum(name == "list_children" for name, _ in wiki.calls) == 50
+
+
+async def test_space_tree_stops_at_two_hundred_pages() -> None:
+    wiki = TreeWiki({None: [summary(f"p{n}", f"Page {n}") for n in range(250)]})
+
+    text = await _read(build_server(wiki, writer=None), "docmost://space/engineering/tree")
+
+    assert text.count("\n- Page ") == 200
+    assert "Page 199" in text
+    assert "Page 200" not in text
+    assert text.rstrip().endswith("(truncated: the tree is larger than this view)")

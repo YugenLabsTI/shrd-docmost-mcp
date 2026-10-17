@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Fixed
+
+- The `docmost://space/{space}/tree` resource keeps the pages it already fetched when its
+  request budget runs out in the middle of a level, instead of dropping that level.
+- A prompt file that clashes with a built-in prompt is named in the startup error.
+- `DOCMOST_BUSY_WINDOW_SECONDS` accepts only plain ASCII digits (no `+`, `_` or other
+  scripts' digits).
+- Client: `PageBusyError.after(seconds)` builds the standard busy error.
+
 ### Resources and prompts
 
 - Read-only MCP resources: `docmost://page/{page_id}` (markdown), `docmost://space/{space}/tree`

@@ -489,7 +489,7 @@ def edit_section(
     window = timedelta(seconds=settings.busy_window_seconds)
     wait = busy_retry_after(current.updated_at, clock(), window)
     if wait is not None:
-        raise page_busy(wait)
+        raise PageBusyError.after(wait)
 
     html = current.content if isinstance(current.content, str) else ""
     check_mentions(content, "html", page_mentions(html, "html"))
@@ -500,14 +500,6 @@ def edit_section(
         {"pageId": current.id, "content": new_html, "operation": "replace", "format": "html"},
     )
     return _parse(Page, {**_object(data), "format": "html"})
-
-
-def page_busy(wait: int) -> PageBusyError:
-    return PageBusyError(
-        "The page was saved too recently and may be open in someone's editor with unsaved "
-        f"changes. Try again in about {wait} seconds.",
-        retry_after_seconds=wait,
-    )
 
 
 def _require_writable(settings: DocmostSettings) -> None:
