@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Resources and prompts
+
+- Read-only MCP resources: `docmost://page/{page_id}` (markdown), `docmost://space/{space}/tree`
+  (bounded page tree) and `docmost://recent`; they respect `DOCMOST_ALLOWED_SPACES`.
+- Generic prompts `summarize_page` and `answer_from_wiki`, hidden with
+  `DOCMOST_BUILTIN_PROMPTS=0`.
+- Team prompts from TOML files in `DOCMOST_PROMPTS_DIR` (`name`, `title`, `description`,
+  `template` with `{{argument}}` placeholders, `[[arguments]]` with `required` or
+  `default`), validated at startup; see `examples/prompts/`.
+
 ### Busy window settings
 
 - `DOCMOST_BUSY_WINDOW_SECONDS` (default `60`, from `45` to `86400`) sets how recently

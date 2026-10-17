@@ -169,6 +169,15 @@ async def mcp_checks(settings: DocmostSettings, read_space: str) -> None:
             print(f"FAIL  mcp list_recent_pages: {recent.structured_content}")
         else:
             print(f"ok    mcp list_recent_pages: {len(recent.structured_content['pages'])} pages")
+        try:
+            tree = await client.read_resource(f"docmost://space/{read_space}/tree")
+            prompts = (await client.list_prompts()).prompts
+        except Exception as exc:  # noqa: BLE001 - report any failure, never page content
+            failures.append("mcp resources")
+            print(f"FAIL  mcp resources: {type(exc).__name__}")
+        else:
+            lines = tree.contents[0].text.count("\n- ")  # type: ignore[union-attr]
+            print(f"ok    mcp space tree resource: {lines} top-level pages, {len(prompts)} prompts")
         result = await client.call_tool("list_children", {"space": read_space})
         if result.is_error:
             failures.append("mcp list_children")
