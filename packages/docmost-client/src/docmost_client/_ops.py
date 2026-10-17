@@ -419,9 +419,13 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def busy_retry_after(updated_at: datetime) -> int | None:
-    """Seconds to wait before a whole-page rewrite, or None when the page is quiet."""
-    age = _utcnow() - updated_at
+def busy_retry_after(updated_at: datetime, now: datetime | None = None) -> int | None:
+    """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
+
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it); the local clock
+    is the fallback.
+    """
+    age = (now or _utcnow()) - updated_at
     if age >= BUSY_WINDOW:
         return None
     return int((BUSY_WINDOW - age).total_seconds()) + 1
@@ -436,6 +440,7 @@ def edit_section(
     operation: SectionOperation,
     content: str,
     expected_updated_at: datetime,
+    clock: Callable[[], datetime | None] = lambda: None,
 ) -> Op[Page]:
     _require_writable(settings)
     if operation not in SECTION_OPERATIONS:
@@ -460,7 +465,8 @@ def edit_section(
             "Read the outline again and reapply the change.",
             current_updated_at=current.updated_at,
         )
-    wait = busy_retry_after(current.updated_at)
+    # Read the clock after the page read, so it reflects that response's Date header.
+    wait = busy_retry_after(current.updated_at, clock())
     if wait is not None:
         raise page_busy(wait)
 

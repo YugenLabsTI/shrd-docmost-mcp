@@ -37,6 +37,10 @@ class WikiReader(Protocol):
 
     async def get_page_outline(self, page_id: str) -> PageOutline: ...
 
+    def server_now(self) -> datetime:
+        """Docmost's current time (from its latest response), else the local clock."""
+        ...
+
     async def list_children(
         self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
     ) -> Paginated[PageSummary]: ...

@@ -555,7 +555,7 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
             outline = await reader.get_page_outline(page_id)
         except DocmostError as exc:
             return SectionCheck(status="precheck_failed", error=exc)
-        wait = busy_retry_after(outline.updated_at)
+        wait = busy_retry_after(outline.updated_at, reader.server_now())
         if wait is not None:
             return SectionCheck(status="busy", retry_after=wait)
         if not confirm_replace:

@@ -8,6 +8,7 @@ server-side session (Docmost keeps at most 25 per user).
 import contextlib
 import threading
 from collections.abc import Mapping
+from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
 
@@ -42,6 +43,7 @@ class Session:
         self._token: str | None = None
         self._lock = threading.Lock()
         self._closed = False
+        self._clock = _protocol.ServerClock()
 
     def __repr__(self) -> str:
         return (
@@ -67,6 +69,10 @@ class Session:
         if response.status_code == 401:
             response = self._post(path, payload, self._relogin(token))
         return _protocol.unwrap(response)
+
+    def server_now(self) -> datetime | None:
+        """Docmost's current time from its latest Date header, or None before any response."""
+        return self._clock.now()
 
     def close(self) -> None:
         """Log out (best effort) and release connections. Idempotent."""
@@ -99,11 +105,13 @@ class Session:
 
     def _post(self, path: str, payload: Payload | None, token: str | None) -> httpx.Response:
         try:
-            return self._client.post(
+            response = self._client.post(
                 path, json=dict(payload or {}), headers=_protocol.bearer(token)
             )
         except httpx.HTTPError as exc:
             raise _protocol.transport_error(exc) from None
+        self._clock.observe(response)
+        return response
 
 
 class AsyncSession:
@@ -119,6 +127,7 @@ class AsyncSession:
         self._token: str | None = None
         self._lock = anyio.Lock()
         self._closed = False
+        self._clock = _protocol.ServerClock()
 
     def __repr__(self) -> str:
         return (
@@ -144,6 +153,10 @@ class AsyncSession:
         if response.status_code == 401:
             response = await self._post(path, payload, await self._relogin(token))
         return _protocol.unwrap(response)
+
+    def server_now(self) -> datetime | None:
+        """Docmost's current time from its latest Date header, or None before any response."""
+        return self._clock.now()
 
     async def aclose(self) -> None:
         """Log out (best effort) and release connections. Idempotent."""
@@ -177,8 +190,10 @@ class AsyncSession:
 
     async def _post(self, path: str, payload: Payload | None, token: str | None) -> httpx.Response:
         try:
-            return await self._client.post(
+            response = await self._client.post(
                 path, json=dict(payload or {}), headers=_protocol.bearer(token)
             )
         except httpx.HTTPError as exc:
             raise _protocol.transport_error(exc) from None
+        self._clock.observe(response)
+        return response

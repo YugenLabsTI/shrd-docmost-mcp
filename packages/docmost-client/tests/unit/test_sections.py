@@ -3,7 +3,7 @@
 import pytest
 
 from docmost_client import InvalidRequestError, NotFoundError
-from docmost_client._sections import splice_section
+from docmost_client._sections import SectionOperation, splice_section
 
 X = 'xmlns="http://www.w3.org/1999/xhtml"'
 
@@ -153,3 +153,61 @@ def test_surrounding_whitespace_and_text_are_preserved() -> None:
 def test_unknown_operation_is_rejected() -> None:
     with pytest.raises(InvalidRequestError, match="operation"):
         splice_section(DOC, "h2a", "delete", NEW)  # type: ignore[arg-type]
+
+
+# --- follow-ups: duplicate ids, accurate NOT_FOUND, raw-text elements -------------
+
+
+@pytest.mark.parametrize(
+    ("heading_id", "operation", "new"),
+    [
+        ("h2a", "prepend", '<h3 data-id="h2b">Copy</h3>'),
+        ("h2a", "append", '<h3 id="h1">Copy</h3>'),
+        # Headings nested in other blocks count too.
+        ("h2a", "replace", '<h3 data-id="nested">Copy</h3>'),
+        ("h2b", "append", '<h2 data-id="x">A</h2><h2 data-id="x">B</h2>'),
+    ],
+)
+def test_new_headings_cannot_reuse_an_id_already_on_the_page(
+    heading_id: str, operation: SectionOperation, new: str
+) -> None:
+    with pytest.raises(InvalidRequestError, match="heading id"):
+        splice_section(DOC, heading_id, operation, new)
+
+
+def test_a_replaced_section_may_reuse_its_own_heading_ids() -> None:
+    new = f'<h3 {X} data-id="h3" dir="auto" id="h3">Advanced</h3><p>Rewritten.</p>'
+
+    result = splice_section(DOC, "h2a", "replace", new)
+
+    assert result.count('data-id="h3"') == 1
+
+
+def test_headings_without_ids_are_accepted() -> None:
+    assert "<h3>Plain</h3>" in splice_section(DOC, "h2a", "append", "<h3>Plain</h3>")
+
+
+def test_an_id_that_is_not_a_heading_says_so() -> None:
+    with pytest.raises(NotFoundError, match="not a heading"):
+        splice_section(DOC, "p1", "replace", NEW)
+
+
+def test_an_id_that_only_appears_in_text_is_not_found() -> None:
+    doc = '<h2 data-id="a">A</h2><p>see data-id="b"</p>'
+
+    with pytest.raises(NotFoundError, match="outline"):
+        splice_section(doc, "b", "replace", NEW)
+
+
+@pytest.mark.parametrize(
+    "tag",
+    ["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes", "noscript"],
+)
+def test_raw_text_elements_are_rejected(tag: str) -> None:
+    with pytest.raises(InvalidRequestError, match=tag):
+        splice_section(DOC, "h2a", "append", f"<{tag.upper()}>x</{tag.upper()}>")
+
+
+def test_plaintext_is_rejected() -> None:
+    with pytest.raises(InvalidRequestError, match="plaintext"):
+        splice_section(DOC, "h2a", "append", "<plaintext>x")

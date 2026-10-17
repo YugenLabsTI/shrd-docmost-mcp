@@ -8,6 +8,7 @@ import mcp_types
 import pytest
 from mcp import Client
 
+import docmost_client._ops
 from docmost_client import (
     Comment,
     CompatibilityReport,
@@ -70,6 +71,7 @@ class FakeWiki:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.fail_with: Exception | None = None
         self.outline_updated_at = UPDATED_AT
+        self.server_time: datetime | None = None
         self.compatibility: CompatibilityReport | Exception = CompatibilityReport(
             status="supported", docmost_version="0.96.0", supported_versions=("0.96.0",)
         )
@@ -187,6 +189,9 @@ class FakeWiki:
             creator_name="Wiki Bot",
             created_at=UPDATED_AT,
         )
+
+    def server_now(self) -> datetime:
+        return self.server_time or docmost_client._ops._utcnow()  # pyright: ignore[reportPrivateUsage]
 
     async def get_page_outline(self, page_id: str) -> PageOutline:
         self._record("get_page_outline", page_id=page_id)
@@ -902,3 +907,16 @@ async def test_callers_cannot_supply_the_section_gate(
     assert "section_gate" not in tools["edit_section"].input_schema["properties"]
     assert result.structured_content["error"]["code"] == "PAGE_BUSY"
     assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+async def test_the_busy_check_before_asking_uses_docmost_s_clock(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    # Locally ten minutes passed (quiet); Docmost's clock says the save was 20 s ago.
+    wiki.server_time = UPDATED_AT + timedelta(seconds=20)
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    assert result.structured_content["error"]["code"] == "PAGE_BUSY"
+    assert result.structured_content["error"]["retry_after_seconds"] == 41
+    assert accept.asked == []
