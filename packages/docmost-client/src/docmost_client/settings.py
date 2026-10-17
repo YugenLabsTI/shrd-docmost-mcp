@@ -19,6 +19,10 @@ _MAX_SECRET_FILE_BYTES = 64 * 1024
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_CONTENT_BYTES = 1_000_000
+DEFAULT_BUSY_WINDOW_SECONDS = 60
+# Docmost persists editor changes up to ~45 s late, so a shorter window would not see them.
+MIN_BUSY_WINDOW_SECONDS = 45
+MAX_BUSY_WINDOW_SECONDS = 86_400
 
 
 class DocmostSettings(BaseModel):
@@ -36,6 +40,7 @@ class DocmostSettings(BaseModel):
     allow_untested_version: bool = False
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_content_bytes: int = DEFAULT_MAX_CONTENT_BYTES
+    busy_window_seconds: int = DEFAULT_BUSY_WINDOW_SECONDS
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "DocmostSettings":
@@ -56,6 +61,8 @@ class DocmostSettings(BaseModel):
                 tested against (the internal API may differ).
             DOCMOST_TIMEOUT_SECONDS: per-request timeout, default 30.
             DOCMOST_MAX_CONTENT_BYTES: maximum page content size accepted for writes.
+            DOCMOST_BUSY_WINDOW_SECONDS: section edits refuse pages saved this recently,
+                default 60, from 45 (Docmost's editor save delay) to 86400.
         """
         env = os.environ if environ is None else environ
         allow_insecure_http = env_flag(env, "DOCMOST_ALLOW_INSECURE_HTTP", default=False)
@@ -74,6 +81,7 @@ class DocmostSettings(BaseModel):
             max_content_bytes=_positive_int(
                 env, "DOCMOST_MAX_CONTENT_BYTES", DEFAULT_MAX_CONTENT_BYTES
             ),
+            busy_window_seconds=_busy_window(env),
         )
 
 
@@ -179,6 +187,24 @@ def _positive_float(env: Mapping[str, str], name: str, default: float) -> float:
         raise ConfigError(f"{name} must be a positive number.") from None
     if not value > 0 or value == float("inf"):
         raise ConfigError(f"{name} must be a positive number.")
+    return value
+
+
+def _busy_window(env: Mapping[str, str]) -> int:
+    name = "DOCMOST_BUSY_WINDOW_SECONDS"
+    raw = env.get(name)
+    if raw is None or not raw.strip():
+        return DEFAULT_BUSY_WINDOW_SECONDS
+    error = ConfigError(
+        f"{name} must be a whole number of seconds from {MIN_BUSY_WINDOW_SECONDS} to "
+        f"{MAX_BUSY_WINDOW_SECONDS}; Docmost saves editor changes up to ~45 seconds late."
+    )
+    try:
+        value = int(raw)
+    except ValueError:
+        raise error from None
+    if not MIN_BUSY_WINDOW_SECONDS <= value <= MAX_BUSY_WINDOW_SECONDS:
+        raise error
     return value
 
 

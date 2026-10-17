@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Busy window settings
+
+- `DOCMOST_BUSY_WINDOW_SECONDS` (default `60`, from `45` to `86400`) sets how recently
+  saved a page must be for `edit_section` to refuse it with `PAGE_BUSY`.
+- Docmost's clock is used only within 5 minutes of the local clock, so a wrong `Date`
+  header can no longer keep every page busy, and only successful responses update it.
+- Client: `busy_retry_after(updated_at)` on both clients; `busy_retry_after` takes an
+  optional `window`.
+
 ### Section editing follow-ups
 
 - `update_page` and `edit_section` keep mentions already on the page (matched by entity

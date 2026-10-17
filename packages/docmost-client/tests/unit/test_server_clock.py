@@ -58,3 +58,13 @@ def test_an_unusable_header_keeps_the_previous_estimate() -> None:
     clock.observe(response("garbage"))
 
     assert clock.now() == datetime(2026, 10, 16, 10, 0, 30, tzinfo=UTC)
+
+
+def test_error_responses_do_not_move_the_clock() -> None:
+    clock = ServerClock(monotonic=Monotonic())
+    clock.observe(response("Fri, 16 Oct 2026 10:00:30 GMT"))
+
+    # A proxy answering an error may stamp its own, different clock.
+    clock.observe(httpx.Response(502, headers={"date": "Thu, 01 Jan 2099 00:00:00 GMT"}, json={}))
+
+    assert clock.now() == datetime(2026, 10, 16, 10, 0, 30, tzinfo=UTC)

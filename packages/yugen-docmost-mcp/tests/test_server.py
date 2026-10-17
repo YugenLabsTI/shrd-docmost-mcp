@@ -190,8 +190,8 @@ class FakeWiki:
             created_at=UPDATED_AT,
         )
 
-    def server_now(self) -> datetime:
-        return self.server_time or docmost_client._ops._utcnow()  # pyright: ignore[reportPrivateUsage]
+    def busy_retry_after(self, updated_at: datetime) -> int | None:
+        return docmost_client.busy_retry_after(updated_at, self.server_time)
 
     async def get_page_outline(self, page_id: str) -> PageOutline:
         self._record("get_page_outline", page_id=page_id)
@@ -910,9 +910,10 @@ async def test_callers_cannot_supply_the_section_gate(
 
 
 async def test_the_busy_check_before_asking_uses_docmost_s_clock(
-    wiki: FakeWiki, accept: Asker, quiet: None
+    wiki: FakeWiki, accept: Asker, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Locally ten minutes passed (quiet); Docmost's clock says the save was 20 s ago.
+    # Locally 90 seconds passed (quiet); Docmost's clock says the save was 20 s ago.
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     wiki.server_time = UPDATED_AT + timedelta(seconds=20)
 
     result = await _section(build_server(wiki, writer=wiki), accept)

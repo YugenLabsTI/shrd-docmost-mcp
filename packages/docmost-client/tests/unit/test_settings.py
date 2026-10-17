@@ -264,3 +264,20 @@ def test_comments_are_disabled_by_default_and_independent_of_read_only() -> None
 def test_invalid_comments_flag_is_rejected() -> None:
     with pytest.raises(ConfigError, match="DOCMOST_ALLOW_COMMENTS"):
         DocmostSettings.from_env(env(DOCMOST_ALLOW_COMMENTS="sometimes"))
+
+
+def test_busy_window_defaults_to_sixty_seconds() -> None:
+    assert DocmostSettings.from_env(env()).busy_window_seconds == 60
+
+
+@pytest.mark.parametrize("raw", ["45", "90", "86400"])
+def test_busy_window_is_configurable(raw: str) -> None:
+    settings = DocmostSettings.from_env(env(DOCMOST_BUSY_WINDOW_SECONDS=raw))
+
+    assert settings.busy_window_seconds == int(raw)
+
+
+@pytest.mark.parametrize("raw", ["44", "0", "-5", "abc", "60.5", "86401"])
+def test_busy_window_below_docmost_s_save_delay_is_refused(raw: str) -> None:
+    with pytest.raises(ConfigError, match="DOCMOST_BUSY_WINDOW_SECONDS"):
+        DocmostSettings.from_env(env(DOCMOST_BUSY_WINDOW_SECONDS=raw))

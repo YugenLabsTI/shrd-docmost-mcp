@@ -18,7 +18,6 @@ from docmost_client import (
     InvalidRequestError,
     PageBusyError,
     UnsupportedVersionError,
-    busy_retry_after,
 )
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
@@ -545,7 +544,7 @@ _SECTION_NOT_NEEDED = SectionGate(status="not_needed")
 def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..., SectionGate]:
     """Resolver chain for edit_section: refuse busy pages first, then ask the user.
 
-    ``check`` reads the outline (cheap) so a page saved in the last minute is refused
+    ``check`` reads the outline (cheap) so a page saved too recently is refused
     before any question. If that read fails, the edit reports its typed error and writes
     nothing: a transient failure must not skip the question.
     """
@@ -555,7 +554,7 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
             outline = await reader.get_page_outline(page_id)
         except DocmostError as exc:
             return SectionCheck(status="precheck_failed", error=exc)
-        wait = busy_retry_after(outline.updated_at, reader.server_now())
+        wait = reader.busy_retry_after(outline.updated_at)
         if wait is not None:
             return SectionCheck(status="busy", retry_after=wait)
         if not confirm_replace:
@@ -623,7 +622,7 @@ def _register_write_tools(
         if section_gate.status == "busy":
             wait = section_gate.retry_after or 60
             raise PageBusyError(
-                "The page was saved less than a minute ago and may be open in someone's "
+                "The page was saved too recently and may be open in someone's "
                 f"editor with unsaved changes. Try again in about {wait} seconds.",
                 retry_after_seconds=wait,
             )
@@ -741,7 +740,8 @@ def _register_write_tools(
             "inserts at the end of the section. content is HTML (e.g. <p>, <ul>, <table>); "
             "it must be well-formed and may keep mentions already on the page but not add "
             "new ones (they notify people). Docmost can only save whole "
-            "pages, so if the page was saved in the last minute the call fails with "
+            "pages, so if the page was saved very recently (DOCMOST_BUSY_WINDOW_SECONDS, 60 "
+            "by default) the call fails with "
             "PAGE_BUSY (wait retry_after_seconds and retry), and otherwise the user may be "
             "asked to confirm. Returns the page as stored (html). "
             + _ERRORS

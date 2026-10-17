@@ -412,25 +412,33 @@ def update_page(
 
 # Docmost persists editor changes up to ~45 s late; a page saved within this window may
 # be open in someone's editor with unsaved edits that a whole-page rewrite would discard.
+# The default of DOCMOST_BUSY_WINDOW_SECONDS.
 BUSY_WINDOW = timedelta(seconds=60)
+# Docmost's clock is trusted only this close to the local one; beyond that, one of them
+# is wrong (a misconfigured host or proxy) and the local clock is used.
+MAX_CLOCK_SKEW = timedelta(minutes=5)
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def busy_retry_after(updated_at: datetime, now: datetime | None = None) -> int | None:
+def busy_retry_after(
+    updated_at: datetime, now: datetime | None = None, window: timedelta = BUSY_WINDOW
+) -> int | None:
     """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
 
-    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of it
-    and the local clock is used, so a wrong clock on either side can only make the
-    window longer, never switch it off.
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). Within
+    MAX_CLOCK_SKEW of the local clock the earlier of the two is used, so a small skew on
+    either side only lengthens the window; beyond it the local clock is used.
     """
     local = _utcnow()
-    age = (local if now is None else min(now, local)) - updated_at
-    if age >= BUSY_WINDOW:
+    skewed = now is None or abs(now - local) > MAX_CLOCK_SKEW
+    current = local if skewed or now is None else min(now, local)
+    age = current - updated_at
+    if age >= window:
         return None
-    return int((BUSY_WINDOW - age).total_seconds()) + 1
+    return int((window - age).total_seconds()) + 1
 
 
 def edit_section(
@@ -468,7 +476,8 @@ def edit_section(
             current_updated_at=current.updated_at,
         )
     # Read the clock after the page read, so it reflects that response's Date header.
-    wait = busy_retry_after(current.updated_at, clock())
+    window = timedelta(seconds=settings.busy_window_seconds)
+    wait = busy_retry_after(current.updated_at, clock(), window)
     if wait is not None:
         raise page_busy(wait)
 
@@ -485,8 +494,8 @@ def edit_section(
 
 def page_busy(wait: int) -> PageBusyError:
     return PageBusyError(
-        "The page was saved less than a minute ago and may be open in someone's editor "
-        f"with unsaved changes. Try again in about {wait} seconds.",
+        "The page was saved too recently and may be open in someone's editor with unsaved "
+        f"changes. Try again in about {wait} seconds.",
         retry_after_seconds=wait,
     )
 

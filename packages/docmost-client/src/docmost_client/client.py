@@ -4,7 +4,7 @@
 the I/O-free operations in ``_ops`` against a session.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import TracebackType
 from typing import Any, Self, TypeVar
 
@@ -231,7 +231,7 @@ class DocmostClient:
         """Replace, prepend to, or append to one section of a page, with HTML content.
 
         Docmost cannot update part of a page, so this rewrites the whole page with the
-        section spliced in. It refuses stale pages and pages saved in the last 60 seconds
+        section spliced in. It refuses stale pages and pages saved too recently
         (PAGE_BUSY), since unsaved edits in someone's editor would be lost.
         """
         return self._run(
@@ -250,6 +250,11 @@ class DocmostClient:
     def server_now(self) -> datetime:
         """Docmost's current time, estimated from its latest response; else the local clock."""
         return self._session.server_now() or _ops._utcnow()  # pyright: ignore[reportPrivateUsage]
+
+    def busy_retry_after(self, updated_at: datetime) -> int | None:
+        """Seconds until a page saved at ``updated_at`` may be rewritten, or None if now."""
+        window = timedelta(seconds=self._settings.busy_window_seconds)
+        return _ops.busy_retry_after(updated_at, self._session.server_now(), window)
 
     def _run(self, op: _ops.Op[T]) -> T:
         return _ops.drive(op, self._call)
@@ -452,7 +457,7 @@ class AsyncDocmostClient:
         """Replace, prepend to, or append to one section of a page, with HTML content.
 
         Docmost cannot update part of a page, so this rewrites the whole page with the
-        section spliced in. It refuses stale pages and pages saved in the last 60 seconds
+        section spliced in. It refuses stale pages and pages saved too recently
         (PAGE_BUSY), since unsaved edits in someone's editor would be lost.
         """
         return await self._run(
@@ -474,6 +479,11 @@ class AsyncDocmostClient:
     def server_now(self) -> datetime:
         """Docmost's current time, estimated from its latest response; else the local clock."""
         return self._session.server_now() or _ops._utcnow()  # pyright: ignore[reportPrivateUsage]
+
+    def busy_retry_after(self, updated_at: datetime) -> int | None:
+        """Seconds until a page saved at ``updated_at`` may be rewritten, or None if now."""
+        window = timedelta(seconds=self._settings.busy_window_seconds)
+        return _ops.busy_retry_after(updated_at, self._session.server_now(), window)
 
     async def _call(self, path: str, payload: dict[str, Any]) -> Any:
         return await self._session.call(path, payload)

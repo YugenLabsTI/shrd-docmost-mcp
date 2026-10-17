@@ -47,6 +47,9 @@ class ServerClock:
         self._anchor: tuple[datetime, float] | None = None
 
     def observe(self, response: httpx.Response) -> None:
+        # Error responses may come from a proxy with its own clock.
+        if not response.is_success:
+            return
         value = response.headers.get("date")
         if not value:
             return

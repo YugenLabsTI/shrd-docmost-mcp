@@ -254,8 +254,11 @@ def dated(data: Any, date: str) -> httpx.Response:
     )
 
 
-def test_the_busy_window_uses_docmost_s_clock(client: DocmostClient, api: respx.MockRouter) -> None:
-    # The local clock says ten minutes passed (quiet_page); Docmost's says 20 seconds.
+def test_the_busy_window_uses_docmost_s_clock(
+    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The local clock says 90 seconds passed; Docmost's says 20 seconds.
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
 
     with pytest.raises(PageBusyError) as exc:
@@ -301,7 +304,10 @@ def test_server_now_falls_back_to_the_local_clock(client: DocmostClient) -> None
 
 
 @pytest.mark.anyio
-async def test_async_client_uses_docmost_s_clock(api: respx.MockRouter) -> None:
+async def test_async_client_uses_docmost_s_clock(
+    api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
     api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:00:20 GMT"))
 
     async with AsyncDocmostClient(settings()) as client:
@@ -314,3 +320,35 @@ async def test_async_client_uses_docmost_s_clock(api: respx.MockRouter) -> None:
                 expected_updated_at=UPDATED_AT,
             )
         assert client.server_now() >= datetime(2026, 10, 16, 10, 0, 20, tzinfo=UTC)
+
+
+def test_a_clock_skewed_by_more_than_five_minutes_is_ignored(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    # A Date header years in the past (e.g. a broken proxy) would keep every page busy.
+    api.routes["info"].mock(return_value=dated(page(), "Wed, 01 Jan 2020 00:00:00 GMT"))
+
+    edit(client)
+
+    assert api.routes["update"].call_count == 1
+
+
+def test_the_busy_window_follows_the_settings(
+    api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=90))
+
+    with (
+        DocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="120")) as client,
+        pytest.raises(PageBusyError, match="31 seconds"),
+    ):
+        edit(client)
+
+    assert api.routes["update"].call_count == 0
+
+
+def test_client_busy_retry_after_uses_its_window(api: respx.MockRouter) -> None:
+    del api
+    with DocmostClient(settings(DOCMOST_BUSY_WINDOW_SECONDS="900")) as client:
+        assert client.busy_retry_after(UPDATED_AT) == 301
+        assert client.busy_retry_after(UPDATED_AT - timedelta(hours=1)) is None
