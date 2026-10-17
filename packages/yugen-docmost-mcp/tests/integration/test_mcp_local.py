@@ -10,7 +10,7 @@ from typing import Any
 
 import mcp_types
 import pytest
-from mcp import Client
+from mcp import Client, MCPError
 
 from docmost_client import DocmostSettings
 from yugen_docmost_mcp.__main__ import create_server
@@ -210,3 +210,30 @@ async def test_section_editing_over_mcp(monkeypatch: pytest.MonkeyPatch) -> None
         assert "Changed." in done.structured_content["content"]
         assert "First." in done.structured_content["content"]
         assert "Second." not in done.structured_content["content"]
+
+
+async def test_resources_and_prompts_over_mcp() -> None:
+    title = f"Resources {uuid.uuid4().hex[:8]}"
+    writer = settings(DOCMOST_READ_ONLY="0", DOCMOST_ALLOWED_SPACES="sandbox")
+    async with Client(create_server(writer)) as client:
+        created = await client.call_tool(
+            "create_page", {"space": "sandbox", "title": title, "content": "Hello resources."}
+        )
+        assert created.is_error is False
+        slug = created.structured_content["slug_id"]
+
+        page = await client.read_resource(f"docmost://page/{slug}")
+        tree = await client.read_resource("docmost://space/sandbox/tree")
+        recent = await client.read_resource("docmost://recent")
+        with pytest.raises(MCPError, match="SPACE_NOT_ALLOWED"):
+            await client.read_resource("docmost://space/engineering/tree")
+        prompts = {p.name for p in (await client.list_prompts()).prompts}
+        summary = await client.get_prompt("summarize_page", {"page_id": slug})
+
+    page_text = page.contents[0].text  # type: ignore[union-attr]
+    assert page_text.startswith(f"# {title}\n")
+    assert "Hello resources." in page_text
+    assert f"- {title} ({slug})" in tree.contents[0].text  # type: ignore[union-attr]
+    assert f"{title} ({slug}) in sandbox" in recent.contents[0].text  # type: ignore[union-attr]
+    assert prompts == {"summarize_page", "answer_from_wiki"}
+    assert slug in summary.messages[0].content.text  # type: ignore[union-attr]

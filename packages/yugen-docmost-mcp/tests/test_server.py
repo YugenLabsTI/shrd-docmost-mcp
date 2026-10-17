@@ -6,7 +6,7 @@ from typing import Any
 
 import mcp_types
 import pytest
-from mcp import Client
+from mcp import Client, MCPError
 
 import docmost_client._ops
 from docmost_client import (
@@ -935,3 +935,120 @@ async def test_skewed_clocks_refuse_a_section_edit_before_asking(
     assert error["retryable"] is False
     assert accept.asked == []
     assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+# --- resources ---------------------------------------------------------------------
+
+
+def summary(page_id: str, title: str, *, children: bool = False) -> PageSummary:
+    return PageSummary(
+        id=page_id, slug_id=f"{page_id}-slug", title=title, space_id="s1", has_children=children
+    )
+
+
+class TreeWiki(FakeWiki):
+    """A space with nested pages: Guide > Install, plus FAQ."""
+
+    def __init__(self, tree: dict[str | None, list[PageSummary]]) -> None:
+        super().__init__()
+        self.tree = tree
+
+    async def list_children(
+        self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
+    ) -> Paginated[PageSummary]:
+        self._record("list_children", space=space, parent_page_id=parent_page_id, cursor=cursor)
+        items = self.tree.get(parent_page_id, [])
+        return Paginated[PageSummary](items=items, has_next_page=False, next_cursor=None)
+
+
+async def _read(server: Any, uri: str) -> str:
+    async with Client(server) as client:
+        result = await client.read_resource(uri)
+    return result.contents[0].text  # type: ignore[union-attr]
+
+
+async def test_resources_are_listed_in_read_only_mode(wiki: FakeWiki) -> None:
+    async with Client(build_server(wiki, writer=None)) as client:
+        static = {str(r.uri) for r in (await client.list_resources()).resources}
+        templates = {
+            t.uri_template for t in (await client.list_resource_templates()).resource_templates
+        }
+
+    assert static == {"docmost://recent"}
+    assert templates == {"docmost://page/{page_id}", "docmost://space/{space}/tree"}
+
+
+async def test_page_resource_is_markdown_with_its_metadata(wiki: FakeWiki) -> None:
+    text = await _read(build_server(wiki, writer=None), "docmost://page/abc123xyz0")
+
+    assert text.startswith("# Runbook\n\n")
+    assert "Page id: p1" in text
+    assert "Updated: 2026-10-16T10:00:00+00:00" in text
+    assert text.endswith("# Runbook\n")
+    assert ("get_page", {"page_id": "abc123xyz0", "format": "markdown"}) in wiki.calls
+
+
+async def test_space_tree_resource_nests_child_pages() -> None:
+    wiki = TreeWiki(
+        {
+            None: [summary("g", "Guide", children=True), summary("f", "FAQ")],
+            "g": [summary("i", "Install")],
+        }
+    )
+
+    text = await _read(build_server(wiki, writer=None), "docmost://space/engineering/tree")
+
+    assert text == (
+        "# Pages in engineering\n\n- Guide (g-slug)\n  - Install (i-slug)\n- FAQ (f-slug)\n"
+    )
+    roots = [
+        kw for name, kw in wiki.calls if name == "list_children" and kw["parent_page_id"] is None
+    ]
+    assert roots == [{"space": "engineering", "parent_page_id": None, "cursor": None}]
+
+
+async def test_space_tree_resource_stops_and_says_so_on_huge_trees() -> None:
+    # Every page has 10 children, forever.
+    class Endless(TreeWiki):
+        async def list_children(
+            self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
+        ) -> Paginated[PageSummary]:
+            self._record("list_children", parent_page_id=parent_page_id)
+            base = parent_page_id or "r"
+            items = [summary(f"{base}.{n}", f"P{n}", children=True) for n in range(10)]
+            return Paginated[PageSummary](items=items, has_next_page=False, next_cursor=None)
+
+    wiki = Endless({})
+
+    text = await _read(build_server(wiki, writer=None), "docmost://space/engineering/tree")
+
+    assert text.count("\n- ") + text.count("  - ") <= 200
+    assert text.rstrip().endswith("(truncated: the tree is larger than this view)")
+    assert sum(name == "list_children" for name, _ in wiki.calls) <= 50
+
+
+async def test_recent_resource_lists_recently_updated_pages(wiki: FakeWiki) -> None:
+    text = await _read(build_server(wiki, writer=None), "docmost://recent")
+
+    assert text == (
+        "# Recently updated pages\n\n"
+        "- Runbook (abc123xyz0) in engineering, updated 2026-10-16T10:00:00+00:00\n"
+    )
+
+
+async def test_resource_errors_are_typed_and_respect_the_allowlist(wiki: FakeWiki) -> None:
+    wiki.fail_with = SpaceNotAllowedError("The space is not in DOCMOST_ALLOWED_SPACES.")
+
+    async with Client(build_server(wiki, writer=None)) as client:
+        with pytest.raises(MCPError, match="SPACE_NOT_ALLOWED"):
+            await client.read_resource("docmost://page/abc123xyz0")
+
+
+async def test_resources_run_the_compatibility_gate_first(wiki: FakeWiki) -> None:
+    wiki.compatibility = UnsupportedVersionError("Docmost 0.1.0 is not supported.")
+
+    async with Client(build_server(wiki, writer=None)) as client:
+        with pytest.raises(MCPError, match="UNSUPPORTED_VERSION"):
+            await client.read_resource("docmost://recent")
+
+    assert not any(name == "list_recent_pages" for name, _ in wiki.calls)

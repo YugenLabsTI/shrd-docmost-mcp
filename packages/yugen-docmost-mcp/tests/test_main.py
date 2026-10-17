@@ -13,6 +13,7 @@ from mcp import Client
 from docmost_client import ConfigError, DocmostSettings
 from yugen_docmost_mcp import __version__
 from yugen_docmost_mcp.__main__ import confirm_replace_from_env, create_server, main
+from yugen_docmost_mcp.prompts import load_prompt_dir
 
 BASE = "https://wiki.example.com"
 API = f"{BASE}/api"
@@ -196,3 +197,28 @@ def test_invalid_replace_confirmation_flag_stops_startup(
 
     assert exc.value.code == 2
     assert "DOCMOST_CONFIRM_REPLACE" in capsys.readouterr().err
+
+
+def test_an_invalid_prompts_dir_stops_startup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    (tmp_path / "bad.toml").write_text('name = "x"\ntemplate = "{{who}}"', encoding="utf-8")
+    for key, value in {
+        "DOCMOST_BASE_URL": BASE,
+        "DOCMOST_EMAIL": "bot@example.com",
+        "DOCMOST_PASSWORD": PASSWORD,
+        "DOCMOST_PROMPTS_DIR": str(tmp_path),
+    }.items():
+        monkeypatch.setenv(key, value)
+
+    with pytest.raises(SystemExit) as exc:
+        main([])
+
+    assert exc.value.code == 2
+    assert "bad.toml" in capsys.readouterr().err
+
+
+def test_the_example_prompts_are_valid() -> None:
+    examples = Path(__file__).parents[3] / "examples" / "prompts"
+
+    assert [p.name for p in load_prompt_dir(examples)] == ["weekly_report"]
