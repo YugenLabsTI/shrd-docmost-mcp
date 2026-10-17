@@ -21,7 +21,7 @@ import re
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -249,3 +249,44 @@ def summarize(events: Iterable[Mapping[str, Any]]) -> AuditSummary:
         for call, event in open_calls.items()
     ]
     return summary
+
+
+_SINCE = re.compile(r"^(\d+)([mhd])$")
+_UNITS = {"m": "minutes", "h": "hours", "d": "days"}
+
+
+def parse_since(value: str, now: datetime) -> datetime:
+    """``30m``, ``24h`` or ``7d`` before ``now``; ValueError otherwise."""
+    match = _SINCE.match(value.strip())
+    if match is None:
+        raise ValueError(value)
+    amount, unit = int(match.group(1)), match.group(2)
+    return now - timedelta(**{_UNITS[unit]: amount})
+
+
+def render_report(summary: AuditSummary, source: str) -> str:
+    """A plain-text report for operators."""
+    ok = sum(counts["ok"] for counts in summary.by_tool.values())
+    errors = sum(counts["error"] for counts in summary.by_tool.values())
+    span = f" ({summary.first} to {summary.last})" if summary.first else ""
+    lines = [f"Audit report: {source}{span}", f"Calls: {summary.calls} (ok {ok}, errors {errors})"]
+    if summary.by_tool:
+        lines.append("By tool:")
+        width = max(len(tool) for tool in summary.by_tool)
+        for tool, counts in sorted(summary.by_tool.items()):
+            lines.append(f"  {tool:<{width}}  ok {counts['ok']}  error {counts['error']}")
+    if summary.errors_by_code:
+        lines.append("Errors and refusals by code:")
+        for code, count in sorted(summary.errors_by_code.items(), key=lambda item: -item[1]):
+            lines.append(f"  {code}  {count}")
+    if summary.spaces:
+        spaces = ", ".join(f"{space} ({count})" for space, count in sorted(summary.spaces.items()))
+        lines.append(f"Spaces: {spaces}")
+    lines.append(
+        f"Pages written: {len(summary.pages_written)}  Pages refused: {len(summary.pages_refused)}"
+    )
+    lines.append(f"Interrupted calls: {len(summary.interrupted)}")
+    lines.extend(
+        f"  {item['tool']} at {item['ts']} (call {item['call']})" for item in summary.interrupted
+    )
+    return "\n".join(lines) + "\n"

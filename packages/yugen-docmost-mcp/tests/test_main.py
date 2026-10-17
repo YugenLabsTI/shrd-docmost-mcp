@@ -237,3 +237,21 @@ async def test_move_page_needs_writes_and_its_flag(
         names = {tool.name for tool in (await client.list_tools()).tools}
 
     assert ("move_page" in names) is has_move
+
+
+def test_an_audit_log_that_cannot_be_opened_stops_startup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    for key, value in {
+        "DOCMOST_BASE_URL": BASE,
+        "DOCMOST_EMAIL": "bot@example.com",
+        "DOCMOST_PASSWORD": PASSWORD,
+        "DOCMOST_AUDIT_LOG": str(tmp_path / "missing" / "audit.jsonl"),
+    }.items():
+        monkeypatch.setenv(key, value)
+
+    with pytest.raises(SystemExit) as exc:
+        main([])
+
+    assert exc.value.code == 2
+    assert "DOCMOST_AUDIT_LOG" in capsys.readouterr().err
