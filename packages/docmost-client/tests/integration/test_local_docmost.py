@@ -10,6 +10,7 @@ import os
 import uuid
 from collections.abc import Iterator
 from datetime import timedelta, timezone
+from typing import Any
 
 import pytest
 
@@ -377,3 +378,60 @@ def test_pages_with_mentions_round_trip_without_new_mentions(writer: DocmostClie
             expected_updated_at=edited.updated_at,
         )
     assert writer.get_page(page.id).updated_at == edited.updated_at
+
+
+@pytest.fixture(scope="module")
+def mover() -> Iterator[DocmostClient]:
+    with DocmostClient(_settings(DOCMOST_READ_ONLY="0", DOCMOST_ALLOW_MOVE="1")) as client:
+        yield client
+
+
+def test_pages_move_and_land_where_asked(mover: DocmostClient) -> None:
+    tag = uuid.uuid4().hex[:8]
+    parent = mover.create_page(space="sandbox", title=f"Move parent {tag}")
+    first = mover.create_page(space="sandbox", title=f"A {tag}", parent_page_id=parent.id)
+    last = mover.create_page(space="sandbox", title=f"B {tag}", parent_page_id=parent.id)
+    page = mover.create_page(space="sandbox", title=f"X {tag}")
+
+    def order() -> list[str]:
+        return [child.id for child in mover.list_children(parent_page_id=parent.id).items]
+
+    moved = mover.move_page(
+        page.id,
+        parent_page_id=parent.id,
+        after_page_id=first.id,
+        expected_updated_at=mover.get_page(page.id).updated_at,
+    )
+    assert moved.parent_page_id == parent.id
+    assert order() == [first.id, page.id, last.id]
+
+    moved = mover.move_page(
+        page.id, parent_page_id=parent.id, placement="start", expected_updated_at=moved.updated_at
+    )
+    assert order() == [page.id, first.id, last.id]
+
+    moved = mover.move_page(page.id, parent_page_id=parent.id, expected_updated_at=moved.updated_at)
+    assert order() == [first.id, last.id, page.id]
+
+    with pytest.raises(StalePageError):
+        mover.move_page(page.id, parent_page_id=None, expected_updated_at=page.updated_at)
+
+    moved = mover.move_page(page.id, parent_page_id=None, expected_updated_at=moved.updated_at)
+    assert moved.parent_page_id is None
+    assert order() == [first.id, last.id]
+
+    with pytest.raises(InvalidRequestError):
+        mover.move_page(parent.id, parent_page_id=first.id, expected_updated_at=parent.updated_at)
+
+
+def test_moves_need_the_move_flag(writer: DocmostClient) -> None:
+    from docmost_client import MoveDisabledError
+
+    with pytest.raises(MoveDisabledError):
+        writer.move_page("anything", parent_page_id=None, expected_updated_at=_now())
+
+
+def _now() -> Any:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC)

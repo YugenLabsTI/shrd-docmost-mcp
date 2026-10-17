@@ -53,6 +53,7 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_PASSWORD` / `DOCMOST_PASSWORD_FILE` | required | Password, or a file containing it (preferred). |
 | `DOCMOST_READ_ONLY` | `1` | Set to `0` to enable `create_page` and `update_page`. |
 | `DOCMOST_ALLOW_COMMENTS` | `0` | Set to `1` to enable `add_comment`, independently of `DOCMOST_READ_ONLY`. |
+| `DOCMOST_ALLOW_MOVE` | `0` | Set to `1` to enable `move_page`; it also needs `DOCMOST_READ_ONLY=0`. |
 | `DOCMOST_CONFIRM_REPLACE` | `1` | Ask the user to confirm every `replace` (see below). `0` skips the question. |
 | `DOCMOST_ALLOWED_SPACES` | all the account's spaces | Comma-separated space slugs or IDs. Set but empty is an error. |
 | `DOCMOST_ALLOW_INSECURE_HTTP` | `0` | Allow `http://` base URLs (local development only). |
@@ -77,6 +78,10 @@ always allowed.
 | `1` | `1` | read, and comment (a reader that comments) |
 | `0` | `0` | read, create and edit pages, but not comment |
 | `0` | `1` | everything above |
+
+Moving pages is a third switch on top of writes: `move_page` exists only with
+`DOCMOST_READ_ONLY=0` and `DOCMOST_ALLOW_MOVE=1`, because reorganizing a space affects
+everyone who navigates it.
 
 Docmost applies its own permissions on top: the account can comment where it can edit the
 page. Letting readers comment ("viewer comments") is an Enterprise feature, so on
@@ -150,12 +155,13 @@ Mentions follow the same rule as `update_page` (see below).
 | `create_page` | write | Create a page, optionally under a parent, with initial content. |
 | `update_page` | write | `append`, `prepend`, or `replace` content and/or rename a page. |
 | `edit_section` | write | `replace`, `prepend`, or `append` within one section, in HTML. |
+| `move_page` | move | Move a page under another parent (or to the space root) and place it after a sibling, first or last. |
 
 Failures return `is_error: true` with
 `{"error": {"code": "...", "message": "...", "retryable": false}}`. Arguments that do not
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
-`READ_ONLY`, `COMMENTS_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
+`READ_ONLY`, `COMMENTS_DISABLED`, `MOVE_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
 `PAGE_BUSY`, `CLOCK_SKEW`,
 `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
@@ -171,6 +177,16 @@ on stderr.
 | `json` | The exact ProseMirror document | Lightly validated by Docmost | Precise structural edits |
 
 Details and evidence: [docs/docmost-api-v0.96.0.md](docs/docmost-api-v0.96.0.md#5-content-formats-s5).
+
+### Moving a page
+
+`move_page` keeps the page's content and only changes where it sits. Pass the new parent
+(an empty `parent_page_id` means the space root), optionally `after_page_id` (a page
+already under that parent) or `placement` (`start` or `end`, the default), and the
+`updated_at` you read. Docmost orders siblings by a position key the client computes
+between the two neighbours; when two neighbours leave no room for one (after many moves
+into the same gap), the call fails with `INVALID_INPUT` and the page stays where it was.
+Pages only move within their space, never under one of their own descendants.
 
 ## MCP resources
 
