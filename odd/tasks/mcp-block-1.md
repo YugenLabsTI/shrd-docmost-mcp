@@ -24,7 +24,7 @@ Assumptions (agent decisions, documented): comments are created as page-level (`
 | T5 | S1, S2 | inline | done | L9; commit `docs: document comments, recent pages and replace confirmation` |
 | T6 | S1, S3, S5 | inline | done | L13; commit `test: cover block 1 against the local Docmost` |
 
-T1 settings `DOCMOST_ALLOW_COMMENTS`, `DOCMOST_CONFIRM_REPLACE` + errors. T2 client `list_recent_pages` with allowlist. T3 client `list_comments` / `create_comment` (flag, allowlist, trash, plain-text→ProseMirror, deleted filtered). T4 MCP tools `list_recent_pages`, `list_comments`, `add_comment` (registered only with the flag) and replace confirmation via `Resolve`/`Elicit`. T5 README permission matrix, env vars, tools, SECURITY (comment side effects), CHANGELOG. T6 local Docmost: enable viewer comments in bootstrap, integration tests (reader comments, recent pages), smoke script update.
+T1 settings `DOCMOST_ALLOW_COMMENTS`, `DOCMOST_CONFIRM_REPLACE` + errors. T2 client `list_recent_pages` with allowlist. T3 client `list_comments` / `create_comment` (flag, allowlist, trash, plain-text→ProseMirror, deleted filtered). T4 MCP tools `list_recent_pages`, `list_comments`, `add_comment` (registered only with the flag) and replace confirmation via `Resolve`/`Elicit`. T5 README permission matrix, env vars, tools, SECURITY (comment side effects), CHANGELOG. T6 local Docmost: integration tests (comment-only mode in the writer space, reader refused, recent pages), recorded fixtures, smoke script update (enabling viewer comments was dropped: Enterprise feature, L10).
 
 High-risk: T3 (writes, permissions), T4 (permission gating, confirmation). Forecast ~900 authored lines → chained PRs.
 

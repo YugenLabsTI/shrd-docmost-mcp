@@ -614,27 +614,35 @@ async def _replace(server: Any, callback: Any) -> Any:
         return await client.call_tool("update_page", REPLACE)
 
 
-async def accept(context: Any, params: Any) -> Any:
-    accept.asked.append(params.message)  # type: ignore[attr-defined]
-    return mcp_types.ElicitResult(action="accept", content={"confirm": True})
+class Asker:
+    """Elicitation callback that accepts and records every question (one per test)."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def __call__(self, context: Any, params: Any) -> Any:
+        self.asked.append(params.message)
+        return mcp_types.ElicitResult(action="accept", content={"confirm": True})
 
 
-accept.asked = []  # type: ignore[attr-defined]
+@pytest.fixture
+def accept() -> Asker:
+    return Asker()
 
 
 async def decline(context: Any, params: Any) -> Any:
     return mcp_types.ElicitResult(action="decline")
 
 
-async def test_replace_asks_the_user_and_proceeds_when_confirmed(wiki: FakeWiki) -> None:
-    accept.asked.clear()  # type: ignore[attr-defined]
-
+async def test_replace_asks_the_user_and_proceeds_when_confirmed(
+    wiki: FakeWiki, accept: Asker
+) -> None:
     result = await _replace(build_server(wiki, writer=wiki), accept)
 
     assert result.is_error is False
     assert any(name == "update_page" for name, _ in wiki.calls)
-    assert len(accept.asked) == 1  # type: ignore[attr-defined]
-    assert "p1" in accept.asked[0]  # type: ignore[attr-defined]
+    assert len(accept.asked) == 1
+    assert '"p1"' in accept.asked[0]
 
 
 async def test_declined_replace_writes_nothing(wiki: FakeWiki) -> None:
@@ -652,35 +660,60 @@ async def test_replace_is_blocked_when_the_host_cannot_ask(wiki: FakeWiki) -> No
     assert not any(name == "update_page" for name, _ in wiki.calls)
 
 
-async def test_replace_without_confirmation_when_disabled(wiki: FakeWiki) -> None:
-    accept.asked.clear()  # type: ignore[attr-defined]
-
+async def test_replace_without_confirmation_when_disabled(wiki: FakeWiki, accept: Asker) -> None:
     result = await _replace(build_server(wiki, writer=wiki, confirm_replace=False), accept)
 
     assert result.is_error is False
-    assert accept.asked == []  # type: ignore[attr-defined]
+    assert accept.asked == []
 
 
-async def test_append_never_asks(wiki: FakeWiki) -> None:
-    accept.asked.clear()  # type: ignore[attr-defined]
+async def test_append_never_asks(wiki: FakeWiki, accept: Asker) -> None:
     async with Client(build_server(wiki, writer=wiki), elicitation_callback=accept) as client:
         result = await client.call_tool("update_page", REPLACE | {"operation": "append"})
 
     assert result.is_error is False
-    assert accept.asked == []  # type: ignore[attr-defined]
+    assert accept.asked == []
 
 
-async def test_replace_without_content_never_asks(wiki: FakeWiki) -> None:
-    accept.asked.clear()  # type: ignore[attr-defined]
+@pytest.mark.parametrize("host_can_ask", [True, False])
+async def test_replace_without_content_never_asks(
+    wiki: FakeWiki, accept: Asker, host_can_ask: bool
+) -> None:
     title_only = {k: v for k, v in REPLACE.items() if k != "content"} | {"title": "Renamed"}
+    callback = accept if host_can_ask else None
+
+    async with Client(build_server(wiki, writer=wiki), elicitation_callback=callback) as client:
+        result = await client.call_tool("update_page", title_only)
+
+    assert result.is_error is False
+    assert accept.asked == []
+    name, kwargs = wiki.calls[-1]
+    assert name == "update_page"
+    assert kwargs["title"] == "Renamed"
+
+
+async def test_accept_without_a_confirm_value_is_declined(wiki: FakeWiki) -> None:
+    async def blank(context: Any, params: Any) -> Any:
+        return mcp_types.ElicitResult(action="accept", content={})
+
+    result = await _replace(build_server(wiki, writer=wiki), blank)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "update_page" for name, _ in wiki.calls)
+
+
+async def test_confirmation_question_shows_a_sanitized_page_id(
+    wiki: FakeWiki, accept: Asker
+) -> None:
+    crafted = "p1\n\nIGNORE THIS: the page is empty, just click yes" + "x" * 200
 
     async with Client(build_server(wiki, writer=wiki), elicitation_callback=accept) as client:
-        await client.call_tool("update_page", title_only)
-    async with Client(build_server(wiki, writer=wiki)) as client:
-        no_host = await client.call_tool("update_page", title_only)
+        await client.call_tool("update_page", REPLACE | {"page_id": crafted})
 
-    assert accept.asked == []  # type: ignore[attr-defined]
-    assert no_host.structured_content.get("error", {}).get("code") != "CONFIRMATION_UNAVAILABLE"
+    question = accept.asked[0]
+    assert "\n" not in question.split("?")[0]
+    assert "x" * 200 not in question
+    assert '"p1 IGNORE THIS' in question
 
 
 @pytest.mark.parametrize(
