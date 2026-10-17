@@ -563,7 +563,7 @@ def move_page(
             raise PermissionDeniedError("The account cannot edit the new parent page.")
 
     siblings = yield from _siblings(allowlist, current, parent)
-    position = _place(siblings, after_page_id, placement)
+    position = _place(current, siblings, after_page_id, placement)
     # Always send parentPageId: Docmost moves a nested page to the root when it is omitted.
     yield (
         "/pages/move",
@@ -600,8 +600,12 @@ def _siblings(allowlist: SpaceAllowlist, page: Page, parent: Page | None) -> Op[
     return sorted(others, key=lambda sibling: (sibling.position or "", sibling.id))
 
 
-def _place(siblings: list[PageSummary], after_page_id: str | None, placement: MovePlacement) -> str:
+def _place(
+    page: Page, siblings: list[PageSummary], after_page_id: str | None, placement: MovePlacement
+) -> str:
     positions = [sibling.position or "" for sibling in siblings]
+    if after_page_id and after_page_id in (page.id, page.slug_id):
+        raise InvalidRequestError("A page cannot be placed after itself.")
     if after_page_id:
         index = next(
             (

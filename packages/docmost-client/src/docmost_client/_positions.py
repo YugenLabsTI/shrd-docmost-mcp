@@ -68,32 +68,50 @@ def _split(key: str) -> tuple[str, str]:
             "A sibling page has a position beyond what this client supports; move the page "
             "in Docmost instead."
         )
-    if "a" <= head <= "y":
-        length = _VALUE[head] - _VALUE["a"] + 2
-    elif "B" <= head <= "Z":
-        length = _VALUE["Z"] - _VALUE[head] + 2
-    else:
+    length = _integer_length(head)
+    if length is None:
         raise InvalidRequestError("A sibling page has a position this client cannot read.")
     if len(key) < length:
         raise InvalidRequestError("A sibling page has a position this client cannot read.")
     return key[:length], key[length:]
 
 
+def _integer_length(head: str) -> int | None:
+    """Characters in an integer part with this head (``a``: 2, ``b``: 3, ``Z``: 2, ``Y``: 3)."""
+    if "a" <= head <= "y":
+        return _VALUE[head] - _VALUE["a"] + 2
+    if "B" <= head <= "Z":
+        return _VALUE["Z"] - _VALUE[head] + 2
+    return None
+
+
 def _increment(integer: str) -> str | None:
-    """The next integer with the same head, or None when its digits are all maxed."""
+    """The next integer; past the last one of a head it starts the next head (az -> b00).
+
+    None when that would need an extreme head (``z``).
+    """
     head, digits = integer[0], integer[1:]
     value = _to_number(digits) + 1
-    if value >= _BASE ** len(digits):
-        return None
-    return head + _to_digits(value, len(digits))
+    if value < _BASE ** len(digits):
+        return head + _to_digits(value, len(digits))
+    return _start_head(DIGITS[_VALUE[head] + 1], "0")
 
 
 def _decrement(integer: str) -> str | None:
+    """The previous integer; below a head's first one it ends the previous head (a0 -> Zz).
+
+    None when that would need an extreme head (``A``).
+    """
     head, digits = integer[0], integer[1:]
     value = _to_number(digits) - 1
-    if value < 0:
-        return None
-    return head + _to_digits(value, len(digits))
+    if value >= 0:
+        return head + _to_digits(value, len(digits))
+    return _start_head(DIGITS[_VALUE[head] - 1], "z")
+
+
+def _start_head(head: str, fill: str) -> str | None:
+    length = _integer_length(head)
+    return None if length is None else head + fill * (length - 1)
 
 
 def _fraction_after(integer: str, fraction: str) -> str:
