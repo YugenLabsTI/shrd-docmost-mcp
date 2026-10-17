@@ -110,6 +110,7 @@ async def test_read_only_server_has_no_write_tools() -> None:
         "list_children",
         "list_recent_pages",
         "list_comments",
+        "get_page_outline",
     }
     assert result.is_error is False
 

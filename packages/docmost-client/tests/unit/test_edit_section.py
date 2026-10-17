@@ -146,7 +146,7 @@ def test_a_recently_saved_page_is_busy(
 ) -> None:
     monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=30))
 
-    with pytest.raises(PageBusyError, match="30") as exc:
+    with pytest.raises(PageBusyError, match="31 seconds") as exc:
         edit(client)
 
     assert exc.value.code == "PAGE_BUSY"

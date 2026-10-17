@@ -12,6 +12,8 @@ from docmost_client import (
     Comment,
     DocmostError,
     Page,
+    PageBusyError,
+    PageOutline,
     PageSummary,
     RecentPage,
     SearchHit,
@@ -21,7 +23,7 @@ from docmost_client import (
 )
 
 # Errors an agent can resolve by waiting or by re-reading and trying again.
-RETRYABLE_CODES = frozenset({"RATE_LIMITED", "UPSTREAM_ERROR", "STALE_PAGE"})
+RETRYABLE_CODES = frozenset({"RATE_LIMITED", "UPSTREAM_ERROR", "STALE_PAGE", "PAGE_BUSY"})
 _HIGHLIGHT = re.compile(r"</?b>", re.IGNORECASE)
 
 
@@ -150,6 +152,28 @@ class ChildrenResult(_Result):
     next_cursor: str | None
 
 
+class HeadingItem(_Result):
+    id: str
+    level: int
+    text: str
+
+
+class OutlineResult(_Result):
+    page_id: str
+    title: str | None
+    updated_at: datetime
+    headings: list[HeadingItem]
+
+    @classmethod
+    def of(cls, outline: PageOutline) -> "OutlineResult":
+        return cls(
+            page_id=outline.page_id,
+            title=outline.title,
+            updated_at=outline.updated_at,
+            headings=[HeadingItem(id=h.id, level=h.level, text=h.text) for h in outline.headings],
+        )
+
+
 class RecentPageItem(_Result):
     id: str
     slug_id: str
@@ -213,6 +237,8 @@ def error_result(exc: DocmostError) -> CallToolResult:
     }
     if isinstance(exc, StalePageError):
         error["current_updated_at"] = _iso(exc.current_updated_at)
+    if isinstance(exc, PageBusyError):
+        error["retry_after_seconds"] = exc.retry_after_seconds
     payload = {"error": error}
     return CallToolResult(
         content=[TextContent(type="text", text=json.dumps(payload))],

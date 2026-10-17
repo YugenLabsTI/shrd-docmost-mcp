@@ -157,6 +157,7 @@ async def mcp_checks(settings: DocmostSettings, read_space: str) -> None:
             "list_children",
             "list_recent_pages",
             "list_comments",
+            "get_page_outline",
         }
         ok = names == expected
         print(f"{'ok   ' if ok else 'FAIL '} mcp tools: {sorted(names)}")
