@@ -115,8 +115,11 @@ up to ~45 s late and would be lost, so two protections apply:
 2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
 
 Only top-level headings can be targeted (not headings inside columns, callouts or
-collapsible blocks). New content must be well-formed HTML and cannot contain mentions;
-mentions already on the page are kept.
+collapsible blocks). New content must be well-formed HTML: every element closed and
+nested correctly, `<` written as `&lt;` in text, and no comments, `<!...>`/`<?...?>`
+constructs or self-closed non-void elements such as `<div/>` (Docmost's parser would let
+them swallow the rest of the page). It cannot contain mentions; mentions already on the
+page are kept.
 
 ## MCP tools
 

@@ -5,7 +5,10 @@ replaces or extends one section here, and writes the whole document back. Docmos
 is a flat sequence of top-level blocks; a section is a top-level heading (addressed by
 its stable ``data-id``) plus every block until the next top-level heading of the same or
 a higher level. Only well-formed HTML is accepted, because an unclosed element in new
-content would swallow the sections that follow it when Docmost parses the page.
+content would swallow the sections that follow it when Docmost parses the page. Docmost
+parses with happy-dom, which also drops everything after an unclosed comment or a stray
+``<`` and ignores ``/>`` on non-void elements, so comments, declarations, processing
+instructions, unescaped ``<`` and self-closed non-void elements are rejected too.
 """
 
 from html.parser import HTMLParser
@@ -36,7 +39,8 @@ class _TopLevel(HTMLParser):
     """Collect the top-level elements of an HTML fragment with their source offsets."""
 
     def __init__(self, html: str) -> None:
-        super().__init__(convert_charrefs=True)
+        # Keep character references out of the data, so a raw "<" in text is visible.
+        super().__init__(convert_charrefs=False)
         self._html = html
         self._line_starts = [0]
         for index, char in enumerate(html):
@@ -61,6 +65,8 @@ class _TopLevel(HTMLParser):
         self._stack.append(tag)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag not in _VOID:
+            self.broken = True
         start = self._offset()
         self._complete(start, start + len(self.get_starttag_text() or ""), tag, attrs)
 
@@ -77,6 +83,22 @@ class _TopLevel(HTMLParser):
             self.blocks.append(_Block(start, end, open_tag, attrs))
             self._open = None
 
+    def handle_data(self, data: str) -> None:
+        if "<" in data:
+            self.broken = True
+
+    def handle_comment(self, data: str) -> None:
+        self.broken = True
+
+    def handle_decl(self, decl: str) -> None:
+        self.broken = True
+
+    def handle_pi(self, data: str) -> None:
+        self.broken = True
+
+    def unknown_decl(self, data: str) -> None:
+        self.broken = True
+
     def _complete(
         self, start: int, end: int, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
@@ -91,6 +113,10 @@ class _TopLevel(HTMLParser):
 def _parse(html: str) -> _TopLevel:
     parser = _TopLevel(html)
     parser.feed(html)
+    # An incomplete construct at the end ("<p>x</p><div", '<div title=">"') stays in
+    # rawdata after feed() and close() would silently drop it.
+    if parser.rawdata:
+        parser.broken = True
     parser.close()
     return parser
 
@@ -111,7 +137,8 @@ def splice_section(html: str, heading_id: str, operation: SectionOperation, new_
         )
     if not _parse(new_html).well_formed:
         raise InvalidRequestError(
-            "content is not well-formed HTML: every element must be closed and nested correctly."
+            "content is not well-formed HTML: close and nest every element, write < as &lt; "
+            "in text, and do not use comments or self-closed elements such as <div/>."
         )
 
     blocks = page.blocks

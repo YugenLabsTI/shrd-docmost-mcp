@@ -11,7 +11,7 @@ import anyio
 from mcp.server.elicitation import AcceptedElicitation, ElicitationResult
 from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
 from mcp_types import ClientCapabilities, ElicitationCapability, ToolAnnotations
-from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
 
 from docmost_client import (
     DocmostError,
@@ -524,13 +524,19 @@ def _register_comment_tool(
 
 
 class SectionCheck(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     status: Literal["ask", "not_needed", "unavailable", "busy", "precheck_failed"]
     retry_after: int | None = None
+    error: DocmostError | None = None
 
 
 class SectionGate(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     status: Literal["not_needed", "unavailable", "busy", "precheck_failed", "accepted", "declined"]
     retry_after: int | None = None
+    error: DocmostError | None = None
 
 
 _SECTION_NOT_NEEDED = SectionGate(status="not_needed")
@@ -540,14 +546,15 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
     """Resolver chain for edit_section: refuse busy pages first, then ask the user.
 
     ``check`` reads the outline (cheap) so a page saved in the last minute is refused
-    before any question; if that read fails, the edit itself reports the typed error.
+    before any question. If that read fails, the edit reports its typed error and writes
+    nothing: a transient failure must not skip the question.
     """
 
     async def check(page_id: str, ctx: Context) -> SectionCheck:
         try:
             outline = await reader.get_page_outline(page_id)
-        except DocmostError:
-            return SectionCheck(status="precheck_failed")
+        except DocmostError as exc:
+            return SectionCheck(status="precheck_failed", error=exc)
         wait = busy_retry_after(outline.updated_at)
         if wait is not None:
             return SectionCheck(status="busy", retry_after=wait)
@@ -575,7 +582,9 @@ def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..
         answer: Annotated[ElicitationResult[ReplaceConfirmation], Resolve(ask)],
     ) -> SectionGate:
         if state.status != "ask":
-            return SectionGate(status=state.status, retry_after=state.retry_after)
+            return SectionGate(
+                status=state.status, retry_after=state.retry_after, error=state.error
+            )
         confirmed = isinstance(answer, AcceptedElicitation) and answer.data.confirm
         return SectionGate(status="accepted" if confirmed else "declined")
 
@@ -609,6 +618,8 @@ def _register_write_tools(
         # Filled by the resolver chain, never by the caller.
         section_gate: Annotated[SectionGate, Resolve(decide_section)] = _SECTION_NOT_NEEDED,
     ) -> PageContent:
+        if section_gate.error is not None:
+            raise section_gate.error
         if section_gate.status == "busy":
             wait = section_gate.retry_after or 60
             raise PageBusyError(
