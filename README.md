@@ -96,6 +96,28 @@ user through the MCP host before writing:
 
 `append`, `prepend` and title changes never ask.
 
+### Editing one section
+
+`edit_section` changes one section instead of the whole page. The agent reads the
+outline with `get_page_outline`, picks a heading by its id, and sends HTML content:
+
+- `replace` swaps the section body (subsections included; the heading stays);
+- `prepend` inserts right after the heading;
+- `append` inserts at the end of the section, before the next heading of the same or a
+  higher level.
+
+Docmost can only save whole pages, so the server splices the section into the page's
+HTML and writes the whole page back. Edits someone is typing in the browser are saved
+up to ~45 s late and would be lost, so two protections apply:
+
+1. if the page was saved in the last 60 seconds, the call fails with `PAGE_BUSY`
+   (retryable, with `retry_after_seconds`) before anything is asked;
+2. otherwise the user confirms the edit, like a `replace` (`DOCMOST_CONFIRM_REPLACE`).
+
+Only top-level headings can be targeted (not headings inside columns, callouts or
+collapsible blocks). New content must be well-formed HTML and cannot contain mentions;
+mentions already on the page are kept.
+
 ## MCP tools
 
 | Tool | Mode | Use it to |
@@ -104,17 +126,20 @@ user through the MCP host before writing:
 | `list_spaces` | read | Discover the spaces the server can access. |
 | `list_children` | read | Browse a space's page tree. |
 | `get_page` | read | Read a page as `markdown` (default), `html`, or `json`. |
+| `get_page_outline` | read | List a page's top-level headings (id, level, text) to target a section. |
 | `list_recent_pages` | read | See what changed lately, across spaces or in one space. |
 | `list_comments` | read | Read a page's comments (plain text, with resolved state and replies). |
 | `add_comment` | comment | Add a page comment or a reply, in plain text. |
 | `create_page` | write | Create a page, optionally under a parent, with initial content. |
 | `update_page` | write | `append`, `prepend`, or `replace` content and/or rename a page. |
+| `edit_section` | write | `replace`, `prepend`, or `append` within one section, in HTML. |
 
 Failures return `is_error: true` with
 `{"error": {"code": "...", "message": "...", "retryable": false}}`. Arguments that do not
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
 `READ_ONLY`, `COMMENTS_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
+`PAGE_BUSY`,
 `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
 `UNSUPPORTED_VERSION`. Invalid configuration stops the server at startup with a message

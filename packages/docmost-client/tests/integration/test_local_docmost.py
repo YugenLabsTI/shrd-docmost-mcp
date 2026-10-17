@@ -19,6 +19,7 @@ from docmost_client import (
     InvalidRequestError,
     NotFoundError,
     Page,
+    PageBusyError,
     PermissionDeniedError,
     ReadOnlyError,
     SpaceNotAllowedError,
@@ -242,3 +243,88 @@ def test_recent_pages_show_the_latest_update_first(writer: DocmostClient) -> Non
     assert [item.updated_at for item in recent] == sorted(
         (item.updated_at for item in recent), reverse=True
     )
+
+
+# --- section editing ---------------------------------------------------------------
+
+SECTIONED = (
+    "<h1>Guide</h1><p>Intro.</p>"
+    "<h2>Install</h2><p>Run the installer.</p>"
+    "<h2>Configure</h2><p>Old configure body.</p><h3>Advanced</h3><p>Knobs.</p>"
+    "<h2>Uninstall</h2><p>Remove it.</p>"
+)
+
+
+def test_a_page_saved_moments_ago_is_busy(writer: DocmostClient) -> None:
+    page = writer.create_page(
+        space="sandbox", title=f"Busy {uuid.uuid4().hex[:8]}", content=SECTIONED, format="html"
+    )
+    outline = writer.get_page_outline(page.id)
+    install = next(h for h in outline.headings if h.text == "Install")
+
+    with pytest.raises(PageBusyError) as exc:
+        writer.edit_section(
+            page.id,
+            heading_id=install.id,
+            operation="append",
+            content="<p>never</p>",
+            expected_updated_at=outline.updated_at,
+        )
+
+    assert exc.value.retry_after_seconds > 0
+
+
+def test_section_edits_change_only_their_section(
+    writer: DocmostClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    from docmost_client import _ops
+
+    # Pretend two minutes passed after each save, so the busy window does not apply.
+    monkeypatch.setattr(_ops, "_utcnow", lambda: datetime.now(UTC) + timedelta(minutes=2))
+    page = writer.create_page(
+        space="sandbox", title=f"Sections {uuid.uuid4().hex[:8]}", content=SECTIONED, format="html"
+    )
+    outline = writer.get_page_outline(page.id)
+    assert [(h.level, h.text) for h in outline.headings] == [
+        (1, "Guide"),
+        (2, "Install"),
+        (2, "Configure"),
+        (3, "Advanced"),
+        (2, "Uninstall"),
+    ]
+    ids = {h.text: h.id for h in outline.headings}
+
+    replaced = writer.edit_section(
+        page.id,
+        heading_id=ids["Configure"],
+        operation="replace",
+        content="<p>New configure body.</p>",
+        expected_updated_at=outline.updated_at,
+    )
+    prepended = writer.edit_section(
+        page.id,
+        heading_id=ids["Install"],
+        operation="prepend",
+        content="<p>Before installing.</p>",
+        expected_updated_at=replaced.updated_at,
+    )
+    writer.edit_section(
+        page.id,
+        heading_id=ids["Uninstall"],
+        operation="append",
+        content="<p>Bye.</p>",
+        expected_updated_at=prepended.updated_at,
+    )
+
+    markdown = writer.get_page(page.id, format="markdown").content
+    assert markdown == (
+        "# Guide\n\nIntro.\n\n## Install\n\nBefore installing.\n\nRun the installer.\n\n"
+        "## Configure\n\nNew configure body.\n\n## Uninstall\n\nRemove it.\n\nBye."
+    )
+    after = writer.get_page_outline(page.id)
+    assert [h.text for h in after.headings] == ["Guide", "Install", "Configure", "Uninstall"]
+    assert {h.text: h.id for h in after.headings} == {
+        k: v for k, v in ids.items() if k != "Advanced"
+    }

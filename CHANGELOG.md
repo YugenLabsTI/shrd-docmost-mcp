@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Both packages follow
 
 ## Unreleased
 
+### Section editing
+
+- `get_page_outline` (read) lists a page's top-level headings; `edit_section` (write)
+  replaces, prepends to, or appends to one section by heading id, in HTML.
+- A section edit is refused with `PAGE_BUSY` when the page was saved in the last 60
+  seconds, and otherwise asks the user to confirm (`DOCMOST_CONFIRM_REPLACE`).
+- Client: `get_page_outline`, `edit_section`, models `PageOutline` and `Heading`, error
+  `PageBusyError`, `busy_retry_after`.
+
 ### Block 1
 
 - `DOCMOST_ALLOW_COMMENTS` (off by default, independent of `DOCMOST_READ_ONLY`) enables
