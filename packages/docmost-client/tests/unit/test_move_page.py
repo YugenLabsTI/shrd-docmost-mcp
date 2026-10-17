@@ -186,6 +186,7 @@ def test_siblings_are_read_across_pages(client: DocmostClient, api: respx.MockRo
     ("overrides", "error", "match"),
     [
         ({"after_page_id": "c-9"}, InvalidRequestError, "after_page_id"),
+        ({"after_page_id": "abc123xyz0"}, InvalidRequestError, "after itself"),
         ({"after_page_id": "c-1", "placement": "start"}, InvalidRequestError, "after_page_id"),
         ({"placement": "middle"}, InvalidRequestError, "placement"),
         ({"parent_page_id": "abc123xyz0"}, InvalidRequestError, "own parent"),

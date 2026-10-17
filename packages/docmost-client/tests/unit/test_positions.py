@@ -91,3 +91,39 @@ def test_random_sibling_lists_always_get_a_key_in_between() -> None:
 def test_unusable_neighbours_are_refused(lower: str, upper: str | None) -> None:
     with pytest.raises(InvalidRequestError):
         key_between(lower, upper)
+
+
+@pytest.mark.parametrize(
+    ("lower", "upper", "expected"),
+    [
+        # The integer part crosses heads like Docmost's library: a0 -> Zz -> Yzz ...
+        (None, "a0000", "Zz000"),
+        (None, "a0", "Zz000"),
+        (None, "Z0000", "Yzz00"),
+        (None, "b0000", "az000"),
+        # ... and up: az -> b00, Zz -> a0, Yzz -> Z0.
+        ("az000", None, "b0000"),
+        ("Zzzzz", None, "a0000"),
+        ("Yzz", None, "Z0000"),
+    ],
+)
+def test_integers_cross_heads_like_docmost(
+    lower: str | None, upper: str | None, expected: str
+) -> None:
+    assert key_between(lower, upper) == expected
+
+
+def test_start_placements_keep_finding_room() -> None:
+    upper = key_between(None, None)
+    for _ in range(500):
+        key = key_between(None, upper)
+        assert valid(key, None, upper)
+        upper = key
+
+
+def test_end_placements_keep_finding_room() -> None:
+    lower = key_between(None, None)
+    for _ in range(5000):
+        key = key_between(lower, None)
+        assert valid(key, lower, None)
+        lower = key
