@@ -12,6 +12,7 @@ from yugen_docmost_mcp.prompts import (
     MAX_PROMPT_FILE_BYTES,
     MAX_PROMPT_FILES,
     load_prompt_dir,
+    parse_prompt,
     prompts_from_env,
 )
 from yugen_docmost_mcp.server import build_server
@@ -258,3 +259,25 @@ def test_prompts_dir_must_be_a_readable_directory(tmp_path: Path, kind: str) -> 
 def test_the_builtin_prompts_are_valid_prompt_definitions() -> None:
     # Built-ins go through the same validation as files.
     assert [p.name for p in BUILTIN_PROMPTS] == ["summarize_page", "answer_from_wiki"]
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        {"name": "a\n", "template": "x"},
+        {"name": "a", "template": "x", "arguments": [{"name": "b\n"}]},
+    ],
+)
+def test_names_with_a_trailing_newline_are_refused(definition: dict[str, Any]) -> None:
+    with pytest.raises(ConfigError, match="name"):
+        parse_prompt(definition, "inline.toml")
+
+
+def test_toml_syntax_errors_never_quote_the_file(tmp_path: Path) -> None:
+    # tomllib quotes keys in some messages ("Cannot declare ('...',) twice").
+    write(tmp_path, "broken.toml", 'name = "x"\n[SECRET_TEMPLATE_TEXT]\n[SECRET_TEMPLATE_TEXT]\n')
+
+    with pytest.raises(ConfigError, match=r"broken\.toml.*line \d+") as exc:
+        load_prompt_dir(tmp_path)
+
+    assert "SECRET" not in str(exc.value)
