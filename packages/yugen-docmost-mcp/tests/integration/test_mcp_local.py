@@ -110,6 +110,7 @@ async def test_read_only_server_has_no_write_tools() -> None:
         "list_children",
         "list_recent_pages",
         "list_comments",
+        "get_page_outline",
     }
     assert result.is_error is False
 
@@ -156,3 +157,52 @@ async def test_comments_and_replace_confirmation_over_mcp() -> None:
         assert replaced.is_error is False
         assert "Replaced." in replaced.structured_content["content"]
         assert "Original." not in replaced.structured_content["content"]
+
+
+async def test_section_editing_over_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[str] = []
+
+    async def accept(context: Any, params: Any) -> Any:
+        asked.append(params.message)
+        return mcp_types.ElicitResult(action="accept", content={"confirm": True})
+
+    server_settings = settings(DOCMOST_READ_ONLY="0", DOCMOST_ALLOWED_SPACES="sandbox")
+    html = "<h2>One</h2><p>First.</p><h2>Two</h2><p>Second.</p>"
+    async with Client(create_server(server_settings), elicitation_callback=accept) as client:
+        created = await client.call_tool(
+            "create_page",
+            {
+                "space": "sandbox",
+                "title": f"MCP sections {uuid.uuid4().hex[:8]}",
+                "content": html,
+                "format": "html",
+            },
+        )
+        page_id = created.structured_content["id"]
+        outline = (
+            await client.call_tool("get_page_outline", {"page_id": page_id})
+        ).structured_content
+        two = next(h for h in outline["headings"] if h["text"] == "Two")
+        edit = {
+            "page_id": page_id,
+            "heading_id": two["id"],
+            "operation": "replace",
+            "content": "<p>Changed.</p>",
+            "expected_updated_at": outline["updated_at"],
+        }
+
+        busy = await client.call_tool("edit_section", edit)
+        assert busy.structured_content["error"]["code"] == "PAGE_BUSY"
+        assert asked == []
+
+        from datetime import UTC, datetime, timedelta
+
+        from docmost_client import _ops
+
+        monkeypatch.setattr(_ops, "_utcnow", lambda: datetime.now(UTC) + timedelta(minutes=2))
+        done = await client.call_tool("edit_section", edit)
+        assert done.is_error is False
+        assert len(asked) == 1
+        assert "Changed." in done.structured_content["content"]
+        assert "First." in done.structured_content["content"]
+        assert "Second." not in done.structured_content["content"]

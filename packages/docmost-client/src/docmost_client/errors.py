@@ -100,3 +100,17 @@ class CommentsDisabledError(DocmostError):
     """A comment was attempted while DOCMOST_ALLOW_COMMENTS is off (the default)."""
 
     code: ClassVar[str] = "COMMENTS_DISABLED"
+
+
+class PageBusyError(DocmostError):
+    """The page was saved moments ago: someone may be editing it right now.
+
+    Raised by section edits, which rewrite the whole page and would discard edits that
+    Docmost has not persisted yet (it saves editor changes up to ~45 s late).
+    """
+
+    code: ClassVar[str] = "PAGE_BUSY"
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds

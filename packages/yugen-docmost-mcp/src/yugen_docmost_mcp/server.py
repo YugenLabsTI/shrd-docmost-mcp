@@ -11,9 +11,15 @@ import anyio
 from mcp.server.elicitation import AcceptedElicitation, ElicitationResult
 from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
 from mcp_types import ClientCapabilities, ElicitationCapability, ToolAnnotations
-from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field
 
-from docmost_client import DocmostError, InvalidRequestError, UnsupportedVersionError
+from docmost_client import (
+    DocmostError,
+    InvalidRequestError,
+    PageBusyError,
+    UnsupportedVersionError,
+    busy_retry_after,
+)
 from yugen_docmost_mcp._version import __version__
 from yugen_docmost_mcp.errors import ConfirmationDeclinedError, ConfirmationUnavailableError
 from yugen_docmost_mcp.ports import WikiCommenter, WikiReader, WikiWriter
@@ -22,6 +28,7 @@ from yugen_docmost_mcp.results import (
     ChildrenResult,
     CommentItem,
     CommentsResult,
+    OutlineResult,
     PageContent,
     PageInfo,
     RecentPageItem,
@@ -90,7 +97,8 @@ Results only cover the spaces this server is allowed to access. Errors carry a s
 `code`; when `retryable` is true, wait or re-read and try again."""
 
 _WRITE_HINT = (
-    "Writes: `create_page` adds a page; `update_page` changes one and requires the "
+    "Writes: `create_page` adds a page; to change one section, use `get_page_outline` then "
+    "`edit_section`; `update_page` changes a whole page and requires the "
     "`updated_at` you read, so concurrent edits are not overwritten. Prefer append or "
     "prepend; use replace only when asked to rewrite the page."
 )
@@ -180,7 +188,7 @@ def build_server(
     if commenter is not None:
         _register_comment_tool(server, commenter, gate)
     if writer is not None:
-        _register_write_tools(server, writer, gate, confirm_replace)
+        _register_write_tools(server, writer, reader, gate, confirm_replace)
     return server
 
 
@@ -260,6 +268,11 @@ def _register_read_tools(
         return ChildrenResult(
             pages=[ChildItem.of(child) for child in page.items], next_cursor=page.next_cursor
         )
+
+    async def get_page_outline(
+        page_id: Annotated[str, Field(description="Page id or slug id.")],
+    ) -> OutlineResult:
+        return OutlineResult.of(await reader.get_page_outline(page_id))
 
     async def list_recent_pages(
         space: Annotated[
@@ -357,6 +370,21 @@ def _register_read_tools(
         structured_output=True,
     )
 
+    server.add_tool(
+        _guarded(gate, get_page_outline),
+        name="get_page_outline",
+        title="Read a page outline",
+        description=(
+            "List a page's top-level headings in order, with each heading's id, level and "
+            "text, plus the page's updated_at. Use it before edit_section to find the "
+            "section to change (headings nested inside other blocks are not listed). "
+            + _ERRORS
+            + "NOT_FOUND (missing or in trash), FORBIDDEN, SPACE_NOT_ALLOWED, INVALID_INPUT, "
+            "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
+        ),
+        annotations=_READ,
+        structured_output=True,
+    )
     server.add_tool(
         _guarded(gate, list_recent_pages),
         name="list_recent_pages",
@@ -495,10 +523,127 @@ def _register_comment_tool(
     )
 
 
+class SectionCheck(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    status: Literal["ask", "not_needed", "unavailable", "busy", "precheck_failed"]
+    retry_after: int | None = None
+    error: DocmostError | None = None
+
+
+class SectionGate(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    status: Literal["not_needed", "unavailable", "busy", "precheck_failed", "accepted", "declined"]
+    retry_after: int | None = None
+    error: DocmostError | None = None
+
+
+_SECTION_NOT_NEEDED = SectionGate(status="not_needed")
+
+
+def _section_resolvers(reader: WikiReader, confirm_replace: bool) -> Callable[..., SectionGate]:
+    """Resolver chain for edit_section: refuse busy pages first, then ask the user.
+
+    ``check`` reads the outline (cheap) so a page saved in the last minute is refused
+    before any question. If that read fails, the edit reports its typed error and writes
+    nothing: a transient failure must not skip the question.
+    """
+
+    async def check(page_id: str, ctx: Context) -> SectionCheck:
+        try:
+            outline = await reader.get_page_outline(page_id)
+        except DocmostError as exc:
+            return SectionCheck(status="precheck_failed", error=exc)
+        wait = busy_retry_after(outline.updated_at)
+        if wait is not None:
+            return SectionCheck(status="busy", retry_after=wait)
+        if not confirm_replace:
+            return SectionCheck(status="not_needed")
+        if not ctx.session.check_client_capability(_ELICITATION):
+            return SectionCheck(status="unavailable")
+        return SectionCheck(status="ask")
+
+    def ask(
+        page_id: str, heading_id: str, state: Annotated[SectionCheck, Resolve(check)]
+    ) -> Elicit[ReplaceConfirmation] | AcceptedElicitation[ReplaceConfirmation]:
+        if state.status != "ask":
+            # Placeholder only: no question was asked; `decide` ignores it.
+            return AcceptedElicitation(data=ReplaceConfirmation(confirm=True))
+        return Elicit(
+            f"Rewrite the section {_quoted(heading_id)} of Docmost page {_quoted(page_id)}? "
+            "Docmost rewrites the whole page to do it, so unsaved edits someone is making "
+            "elsewhere on the page could be lost.",
+            ReplaceConfirmation,
+        )
+
+    def decide(
+        state: Annotated[SectionCheck, Resolve(check)],
+        answer: Annotated[ElicitationResult[ReplaceConfirmation], Resolve(ask)],
+    ) -> SectionGate:
+        if state.status != "ask":
+            return SectionGate(
+                status=state.status, retry_after=state.retry_after, error=state.error
+            )
+        confirmed = isinstance(answer, AcceptedElicitation) and answer.data.confirm
+        return SectionGate(status="accepted" if confirmed else "declined")
+
+    return decide
+
+
 def _register_write_tools(
-    server: MCPServer[Any], writer: WikiWriter, gate: CompatibilityGate, confirm_replace: bool
+    server: MCPServer[Any],
+    writer: WikiWriter,
+    reader: WikiReader,
+    gate: CompatibilityGate,
+    confirm_replace: bool,
 ) -> None:
     decide = _confirmation_resolvers(confirm_replace)
+    decide_section = _section_resolvers(reader, confirm_replace)
+
+    async def edit_section(
+        page_id: Annotated[str, Field(description="Page id or slug id.")],
+        heading_id: Annotated[
+            str, Field(description="Heading id from get_page_outline that starts the section.")
+        ],
+        operation: Annotated[
+            Literal["replace", "prepend", "append"],
+            Field(description="replace the section body, prepend after the heading, or append."),
+        ],
+        content: Annotated[str, Field(min_length=1, description="New content as HTML.")],
+        expected_updated_at: Annotated[
+            AwareDatetime,
+            Field(description="updated_at from your last get_page_outline or get_page."),
+        ],
+        # Filled by the resolver chain, never by the caller.
+        section_gate: Annotated[SectionGate, Resolve(decide_section)] = _SECTION_NOT_NEEDED,
+    ) -> PageContent:
+        if section_gate.error is not None:
+            raise section_gate.error
+        if section_gate.status == "busy":
+            wait = section_gate.retry_after or 60
+            raise PageBusyError(
+                "The page was saved less than a minute ago and may be open in someone's "
+                f"editor with unsaved changes. Try again in about {wait} seconds.",
+                retry_after_seconds=wait,
+            )
+        if section_gate.status == "unavailable":
+            raise ConfirmationUnavailableError(
+                "A section edit needs the user's confirmation, but this MCP host cannot ask "
+                "for it. Have the operator set DOCMOST_CONFIRM_REPLACE=0 to allow it."
+            )
+        if section_gate.status == "declined":
+            raise ConfirmationDeclinedError(
+                "The user did not confirm the section edit; nothing was changed."
+            )
+        page = await writer.edit_section(
+            page_id,
+            heading_id=heading_id,
+            operation=operation,
+            content=content,
+            expected_updated_at=expected_updated_at,
+        )
+        return PageContent.of(page)
 
     async def create_page(
         space: Annotated[str, Field(description="Space slug or id to create the page in.")],
@@ -582,6 +727,29 @@ def _register_write_tools(
             "AUTH_FAILED, RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
         ),
         annotations=_CREATE,
+        structured_output=True,
+    )
+    server.add_tool(
+        _guarded(gate, edit_section),
+        name="edit_section",
+        title="Edit one section of a page",
+        description=(
+            "Change one section of a page instead of rewriting it: call get_page_outline, "
+            "pick the heading whose section you want to change, and pass its id with the "
+            "outline's updated_at. operation: replace swaps the section body (subsections "
+            "included, the heading stays), prepend inserts right after the heading, append "
+            "inserts at the end of the section. content is HTML (e.g. <p>, <ul>, <table>); "
+            "it must be well-formed and cannot contain mentions. Docmost can only save whole "
+            "pages, so if the page was saved in the last minute the call fails with "
+            "PAGE_BUSY (wait retry_after_seconds and retry), and otherwise the user may be "
+            "asked to confirm. Returns the page as stored (html). "
+            + _ERRORS
+            + "PAGE_BUSY (retryable), STALE_PAGE (retryable after re-reading), "
+            "CONFIRMATION_DECLINED, CONFIRMATION_UNAVAILABLE, NOT_FOUND (page or heading), "
+            "READ_ONLY, FORBIDDEN, SPACE_NOT_ALLOWED, INVALID_INPUT, AUTH_FAILED, "
+            "RATE_LIMITED, UPSTREAM_ERROR, UNSUPPORTED_VERSION."
+        ),
+        annotations=_UPDATE,
         structured_output=True,
     )
     server.add_tool(

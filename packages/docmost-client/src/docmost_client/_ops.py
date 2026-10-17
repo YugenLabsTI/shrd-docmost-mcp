@@ -9,17 +9,24 @@ transport are thrown into the generator, so an operation can handle them. ``driv
 import json
 import re
 from collections.abc import Awaitable, Callable, Generator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from docmost_client._content import check_content, check_size, comment_document
+from docmost_client._content import (
+    check_content,
+    check_size,
+    comment_document,
+    top_level_headings,
+)
+from docmost_client._sections import SECTION_OPERATIONS, SectionOperation, splice_section
 from docmost_client.errors import (
     CommentsDisabledError,
     DocmostError,
     InvalidRequestError,
     NotFoundError,
+    PageBusyError,
     PermissionDeniedError,
     ReadOnlyError,
     SpaceNotAllowedError,
@@ -33,7 +40,9 @@ from docmost_client.models import (
     ContentFormat,
     ContentOperation,
     CurrentUser,
+    Heading,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -154,6 +163,17 @@ def get_page(allowlist: SpaceAllowlist, page_id: str, format: ContentFormat) -> 
     if page.deleted_at is not None:
         raise NotFoundError("The page is in the trash.")
     return page
+
+
+def get_page_outline(allowlist: SpaceAllowlist, page_id: str) -> Op[PageOutline]:
+    page = yield from get_page(allowlist, page_id, "json")
+    headings = [
+        Heading(id=heading_id, level=level, text=text)
+        for heading_id, level, text in top_level_headings(page.content)
+    ]
+    return PageOutline(
+        page_id=page.id, title=page.title, updated_at=page.updated_at, headings=headings
+    )
 
 
 def list_children(
@@ -377,6 +397,79 @@ def update_page(
             "the server failed to persist the document; check the Docmost logs."
         )
     return result
+
+
+# Docmost persists editor changes up to ~45 s late; a page saved within this window may
+# be open in someone's editor with unsaved edits that a whole-page rewrite would discard.
+BUSY_WINDOW = timedelta(seconds=60)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def busy_retry_after(updated_at: datetime) -> int | None:
+    """Seconds to wait before a whole-page rewrite, or None when the page is quiet."""
+    age = _utcnow() - updated_at
+    if age >= BUSY_WINDOW:
+        return None
+    return int((BUSY_WINDOW - age).total_seconds()) + 1
+
+
+def edit_section(
+    settings: DocmostSettings,
+    allowlist: SpaceAllowlist,
+    page_id: str,
+    *,
+    heading_id: str,
+    operation: SectionOperation,
+    content: str,
+    expected_updated_at: datetime,
+) -> Op[Page]:
+    _require_writable(settings)
+    if operation not in SECTION_OPERATIONS:
+        raise InvalidRequestError(f"operation must be one of: {', '.join(SECTION_OPERATIONS)}.")
+    if expected_updated_at.utcoffset() is None:
+        raise InvalidRequestError(
+            "expected_updated_at must include a timezone (use the updated_at returned by "
+            "get_page_outline or get_page)."
+        )
+    # Guards apply to the new fragment only: the rest of the page may legitimately hold
+    # mentions written by people.
+    check_content(content, "html", settings.max_content_bytes)
+
+    current = yield from get_page(allowlist, page_id, "html")
+    if current.is_locked:
+        raise PermissionDeniedError("The page is locked; unlock it in Docmost before editing.")
+    if current.can_edit is False:
+        raise PermissionDeniedError("The account cannot edit this page.")
+    if current.updated_at != expected_updated_at:
+        raise StalePageError(
+            "The page changed since it was read: it was updated at "
+            f"{current.updated_at.isoformat()}, not {expected_updated_at.isoformat()}. "
+            "Read the outline again and reapply the change.",
+            current_updated_at=current.updated_at,
+        )
+    wait = busy_retry_after(current.updated_at)
+    if wait is not None:
+        raise page_busy(wait)
+
+    html = current.content if isinstance(current.content, str) else ""
+    new_html = splice_section(html, heading_id, operation, content)
+    check_size(new_html, settings.max_content_bytes)
+    data = yield (
+        "/pages/update",
+        {"pageId": current.id, "content": new_html, "operation": "replace", "format": "html"},
+    )
+    return _parse(Page, {**_object(data), "format": "html"})
+
+
+def page_busy(wait: int) -> PageBusyError:
+    return PageBusyError(
+        "The page was saved less than a minute ago and may be open in someone's editor "
+        f"with unsaved changes. Try again in about {wait} seconds.",
+        retry_after_seconds=wait,
+    )
 
 
 def _require_writable(settings: DocmostSettings) -> None:

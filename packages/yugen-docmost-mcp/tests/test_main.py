@@ -24,6 +24,7 @@ READ_TOOLS = {
     "list_children",
     "list_recent_pages",
     "list_comments",
+    "get_page_outline",
 }
 FIXTURES = Path(__file__).parents[2] / "docmost-client" / "tests" / "fixtures" / "v0_96_0"
 
@@ -165,8 +166,8 @@ def test_invalid_replace_confirmation_flag_is_a_config_error() -> None:
     [
         ("0", "1", set()),
         ("1", "1", {"add_comment"}),
-        ("0", "0", {"create_page", "update_page"}),
-        ("1", "0", {"add_comment", "create_page", "update_page"}),
+        ("0", "0", {"create_page", "update_page", "edit_section"}),
+        ("1", "0", {"add_comment", "create_page", "update_page", "edit_section"}),
     ],
 )
 async def test_permission_matrix_controls_the_write_tools(

@@ -1,5 +1,6 @@
 """Unofficial typed client for the internal API of self-hosted Docmost Community Edition."""
 
+from docmost_client._ops import BUSY_WINDOW, busy_retry_after
 from docmost_client._version import __version__
 from docmost_client.client import AsyncDocmostClient, DocmostClient
 from docmost_client.compat import SUPPORTED_DOCMOST_VERSIONS
@@ -10,6 +11,7 @@ from docmost_client.errors import (
     DocmostError,
     InvalidRequestError,
     NotFoundError,
+    PageBusyError,
     PermissionDeniedError,
     RateLimitedError,
     ReadOnlyError,
@@ -26,7 +28,9 @@ from docmost_client.models import (
     ContentFormat,
     ContentOperation,
     CurrentUser,
+    Heading,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -39,6 +43,7 @@ from docmost_client.session import AsyncSession, Session
 from docmost_client.settings import DocmostSettings
 
 __all__ = [
+    "BUSY_WINDOW",
     "CONTENT_FORMATS",
     "CONTENT_OPERATIONS",
     "SUPPORTED_DOCMOST_VERSIONS",
@@ -55,9 +60,12 @@ __all__ = [
     "DocmostClient",
     "DocmostError",
     "DocmostSettings",
+    "Heading",
     "InvalidRequestError",
     "NotFoundError",
     "Page",
+    "PageBusyError",
+    "PageOutline",
     "PageSummary",
     "Paginated",
     "PermissionDeniedError",
@@ -74,4 +82,5 @@ __all__ = [
     "UnsupportedVersionError",
     "UpstreamError",
     "__version__",
+    "busy_retry_after",
 ]

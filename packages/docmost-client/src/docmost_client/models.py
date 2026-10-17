@@ -191,6 +191,27 @@ class Comment(_Model):
     deleted_at: datetime | None = None
 
 
+class Heading(BaseModel):
+    """A top-level heading; its id addresses the section it starts."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    level: int
+    text: str
+
+
+class PageOutline(BaseModel):
+    """The top-level headings of a page, in document order."""
+
+    model_config = ConfigDict(frozen=True)
+
+    page_id: str
+    title: str | None
+    updated_at: datetime
+    headings: list[Heading]
+
+
 class Paginated(BaseModel, Generic[T]):
     """One page of a cursor-paginated listing. Page on ``next_cursor``, not item count."""
 

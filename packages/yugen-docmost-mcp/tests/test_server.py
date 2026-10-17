@@ -1,7 +1,7 @@
 """MCP surface: tool registration, structured results, and typed errors (fake ports)."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import mcp_types
@@ -13,9 +13,12 @@ from docmost_client import (
     CompatibilityReport,
     ContentFormat,
     ContentOperation,
+    Heading,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
+    RateLimitedError,
     RecentPage,
     SearchHit,
     SearchResults,
@@ -24,6 +27,7 @@ from docmost_client import (
     SpaceRef,
     StalePageError,
     UnsupportedVersionError,
+    UpstreamError,
 )
 from yugen_docmost_mcp.server import build_server
 
@@ -38,8 +42,9 @@ READ_TOOLS = {
     "list_children",
     "list_recent_pages",
     "list_comments",
+    "get_page_outline",
 }
-WRITE_TOOLS = {"create_page", "update_page"}
+WRITE_TOOLS = {"create_page", "update_page", "edit_section"}
 
 
 def make_page(fmt: ContentFormat = "markdown", content: Any = "# Runbook\n") -> Page:
@@ -64,6 +69,7 @@ class FakeWiki:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.fail_with: Exception | None = None
+        self.outline_updated_at = UPDATED_AT
         self.compatibility: CompatibilityReport | Exception = CompatibilityReport(
             status="supported", docmost_version="0.96.0", supported_versions=("0.96.0",)
         )
@@ -181,6 +187,34 @@ class FakeWiki:
             creator_name="Wiki Bot",
             created_at=UPDATED_AT,
         )
+
+    async def get_page_outline(self, page_id: str) -> PageOutline:
+        self._record("get_page_outline", page_id=page_id)
+        return PageOutline(
+            page_id="p1",
+            title="Runbook",
+            updated_at=self.outline_updated_at,
+            headings=[Heading(id="h1", level=2, text="Install")],
+        )
+
+    async def edit_section(
+        self,
+        page_id: str,
+        *,
+        heading_id: str,
+        operation: str,
+        content: str,
+        expected_updated_at: datetime,
+    ) -> Page:
+        self._record(
+            "edit_section",
+            page_id=page_id,
+            heading_id=heading_id,
+            operation=operation,
+            content=content,
+            expected_updated_at=expected_updated_at,
+        )
+        return make_page("html", "<h2>Install</h2><p>New.</p>")
 
     async def update_page(
         self,
@@ -490,7 +524,6 @@ async def test_empty_optional_identifiers_mean_not_given(wiki: FakeWiki) -> None
 
 
 async def test_failed_compatibility_lookups_are_retried(wiki: FakeWiki) -> None:
-    from docmost_client import UpstreamError
 
     wiki.compatibility = UpstreamError("down")
     server = build_server(wiki, writer=None)
@@ -731,3 +764,141 @@ async def test_unconfirmed_replace_fails_closed(wiki: FakeWiki, answer: Any) -> 
 
     assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
     assert not any(name == "update_page" for name, _ in wiki.calls)
+
+
+# --- section editing ---------------------------------------------------------------
+
+SECTION = {
+    "page_id": "p1",
+    "heading_id": "h1",
+    "operation": "replace",
+    "content": "<p>New.</p>",
+    "expected_updated_at": "2026-10-16T10:00:00Z",
+}
+
+
+@pytest.fixture
+def quiet(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Ten minutes after the page's last save: outside the busy window.
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(minutes=10))
+
+
+async def _section(server: Any, callback: Any, **overrides: Any) -> Any:
+    async with Client(server, elicitation_callback=callback) as client:
+        return await client.call_tool("edit_section", SECTION | overrides)
+
+
+async def test_page_outline_tool(wiki: FakeWiki) -> None:
+    result = await call(build_server(wiki, writer=None), "get_page_outline", page_id="p1")
+
+    assert result.structured_content == {
+        "page_id": "p1",
+        "title": "Runbook",
+        "updated_at": "2026-10-16T10:00:00Z",
+        "headings": [{"id": "h1", "level": 2, "text": "Install"}],
+    }
+
+
+async def test_confirmed_section_edit_reaches_the_writer(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    assert result.is_error is False
+    assert len(accept.asked) == 1
+    assert '"h1"' in accept.asked[0]
+    assert '"p1"' in accept.asked[0]
+    name, kwargs = wiki.calls[-1]
+    assert name == "edit_section"
+    assert kwargs["heading_id"] == "h1"
+    assert kwargs["expected_updated_at"] == UPDATED_AT
+
+
+async def test_declined_section_edit_writes_nothing(wiki: FakeWiki, quiet: None) -> None:
+    result = await _section(build_server(wiki, writer=wiki), decline)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_DECLINED"
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+async def test_section_edit_needs_a_host_that_can_ask(wiki: FakeWiki, quiet: None) -> None:
+    result = await _section(build_server(wiki, writer=wiki), None)
+
+    assert result.structured_content["error"]["code"] == "CONFIRMATION_UNAVAILABLE"
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+async def test_a_busy_page_is_refused_before_asking(
+    wiki: FakeWiki, accept: Asker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(seconds=20))
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    error = result.structured_content["error"]
+    assert error["code"] == "PAGE_BUSY"
+    assert error["retryable"] is True
+    assert error["retry_after_seconds"] == 41
+    assert accept.asked == []
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+async def test_section_edit_without_confirmation_when_disabled(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    result = await _section(build_server(wiki, writer=wiki, confirm_replace=False), accept)
+
+    assert result.is_error is False
+    assert accept.asked == []
+
+
+async def test_a_failing_precheck_is_reported_by_the_edit_itself(
+    wiki: FakeWiki, accept: Asker, quiet: None
+) -> None:
+    wiki.fail_with = SpaceNotAllowedError("The space is not in DOCMOST_ALLOWED_SPACES.")
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    assert result.structured_content["error"]["code"] == "SPACE_NOT_ALLOWED"
+    assert accept.asked == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        RateLimitedError("Docmost is rate limiting requests; retry shortly."),
+        UpstreamError("Docmost returned an unexpected error."),
+    ],
+)
+async def test_a_transient_precheck_failure_writes_nothing(
+    wiki: FakeWiki, accept: Asker, quiet: None, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    # The outline read fails but the edit's own read would succeed: never skip the question.
+    async def failing_outline(page_id: str) -> PageOutline:
+        raise error
+
+    monkeypatch.setattr(wiki, "get_page_outline", failing_outline)
+
+    result = await _section(build_server(wiki, writer=wiki), accept)
+
+    assert result.structured_content["error"]["code"] == error.code  # type: ignore[attr-defined]
+    assert accept.asked == []
+    assert not any(name == "edit_section" for name, _ in wiki.calls)
+
+
+@pytest.mark.parametrize("callback", [None, "accept"])
+async def test_callers_cannot_supply_the_section_gate(
+    wiki: FakeWiki, accept: Asker, monkeypatch: pytest.MonkeyPatch, callback: str | None
+) -> None:
+    monkeypatch.setattr("docmost_client._ops._utcnow", lambda: UPDATED_AT + timedelta(seconds=20))
+    server = build_server(wiki, writer=wiki)
+
+    async with Client(server, elicitation_callback=accept if callback else None) as client:
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+        result = await client.call_tool(
+            "edit_section", SECTION | {"section_gate": {"status": "accepted"}}
+        )
+
+    assert "section_gate" not in tools["edit_section"].input_schema["properties"]
+    assert result.structured_content["error"]["code"] == "PAGE_BUSY"
+    assert not any(name == "edit_section" for name, _ in wiki.calls)

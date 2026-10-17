@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Any, Self, TypeVar
 
 from docmost_client import _ops, compat
+from docmost_client._sections import SectionOperation
 from docmost_client.models import (
     Comment,
     CompatibilityReport,
@@ -16,6 +17,7 @@ from docmost_client.models import (
     ContentOperation,
     CurrentUser,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -106,6 +108,10 @@ class DocmostClient:
     def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
         return self._run(_ops.get_page(self._allowlist, page_id, format))
+
+    def get_page_outline(self, page_id: str) -> PageOutline:
+        """List a page's top-level headings (id, level, text) for section edits."""
+        return self._run(_ops.get_page_outline(self._allowlist, page_id))
 
     def list_children(
         self,
@@ -213,6 +219,33 @@ class DocmostClient:
             )
         )
 
+    def edit_section(
+        self,
+        page_id: str,
+        *,
+        heading_id: str,
+        operation: SectionOperation,
+        content: str,
+        expected_updated_at: datetime,
+    ) -> Page:
+        """Replace, prepend to, or append to one section of a page, with HTML content.
+
+        Docmost cannot update part of a page, so this rewrites the whole page with the
+        section spliced in. It refuses stale pages and pages saved in the last 60 seconds
+        (PAGE_BUSY), since unsaved edits in someone's editor would be lost.
+        """
+        return self._run(
+            _ops.edit_section(
+                self._settings,
+                self._allowlist,
+                page_id,
+                heading_id=heading_id,
+                operation=operation,
+                content=content,
+                expected_updated_at=expected_updated_at,
+            )
+        )
+
     def _run(self, op: _ops.Op[T]) -> T:
         return _ops.drive(op, self._call)
 
@@ -287,6 +320,10 @@ class AsyncDocmostClient:
     async def get_page(self, page_id: str, *, format: ContentFormat = "markdown") -> Page:
         """Return a page (by UUID or slug ID) with its content in ``format``."""
         return await self._run(_ops.get_page(self._allowlist, page_id, format))
+
+    async def get_page_outline(self, page_id: str) -> PageOutline:
+        """List a page's top-level headings (id, level, text) for section edits."""
+        return await self._run(_ops.get_page_outline(self._allowlist, page_id))
 
     async def list_children(
         self,
@@ -394,6 +431,33 @@ class AsyncDocmostClient:
                 format=format,
                 title=title,
                 icon=icon,
+                expected_updated_at=expected_updated_at,
+            )
+        )
+
+    async def edit_section(
+        self,
+        page_id: str,
+        *,
+        heading_id: str,
+        operation: SectionOperation,
+        content: str,
+        expected_updated_at: datetime,
+    ) -> Page:
+        """Replace, prepend to, or append to one section of a page, with HTML content.
+
+        Docmost cannot update part of a page, so this rewrites the whole page with the
+        section spliced in. It refuses stale pages and pages saved in the last 60 seconds
+        (PAGE_BUSY), since unsaved edits in someone's editor would be lost.
+        """
+        return await self._run(
+            _ops.edit_section(
+                self._settings,
+                self._allowlist,
+                page_id,
+                heading_id=heading_id,
+                operation=operation,
+                content=content,
                 expected_updated_at=expected_updated_at,
             )
         )

@@ -5,7 +5,7 @@ from docmost-client satisfies both structurally; tests use in-memory fakes.
 """
 
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from docmost_client import (
     Comment,
@@ -13,6 +13,7 @@ from docmost_client import (
     ContentFormat,
     ContentOperation,
     Page,
+    PageOutline,
     PageSummary,
     Paginated,
     RecentPage,
@@ -33,6 +34,8 @@ class WikiReader(Protocol):
     ) -> SearchResults: ...
 
     async def get_page(self, page_id: str, *, format: ContentFormat) -> Page: ...
+
+    async def get_page_outline(self, page_id: str) -> PageOutline: ...
 
     async def list_children(
         self, *, space: str | None, parent_page_id: str | None, limit: int, cursor: str | None
@@ -63,6 +66,16 @@ class WikiWriter(Protocol):
         format: ContentFormat,
         parent_page_id: str | None,
         icon: str | None,
+    ) -> Page: ...
+
+    async def edit_section(
+        self,
+        page_id: str,
+        *,
+        heading_id: str,
+        operation: Literal["replace", "prepend", "append"],
+        content: str,
+        expected_updated_at: datetime,
     ) -> Page: ...
 
     async def update_page(
