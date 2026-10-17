@@ -277,3 +277,26 @@ def test_summary_tolerates_hand_edited_lines(tmp_path: Path) -> None:
 
     assert summary.calls == 2
     assert summary.errors_by_code == {"7": 1}
+
+
+def test_short_writes_are_completed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    audit = log(tmp_path)
+    real_write = os.write
+
+    def one_byte_at_a_time(fd: int, data: bytes) -> int:
+        return real_write(fd, data[:1])
+
+    monkeypatch.setattr("yugen_docmost_mcp.audit.os.write", one_byte_at_a_time)
+    audit.started("c1", "create_page", {"space": "eng"})
+
+    assert lines(tmp_path / "audit.jsonl")[0]["args"] == {"space": "eng"}
+
+
+def test_a_write_that_makes_no_progress_refuses_the_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audit = log(tmp_path)
+    monkeypatch.setattr("yugen_docmost_mcp.audit.os.write", lambda fd, data: 0)
+
+    with pytest.raises(AuditUnavailableError):
+        audit.started("c1", "create_page", {})

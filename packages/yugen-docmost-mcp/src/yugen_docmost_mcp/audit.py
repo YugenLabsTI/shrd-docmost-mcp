@@ -165,7 +165,13 @@ class AuditLog:
         fd = self._open()
         try:
             # One write of a short line: O_APPEND keeps concurrent writers' lines whole.
-            os.write(fd, line)
+            # A short write is completed; a write that makes no progress is an error.
+            view = memoryview(line)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0:
+                    raise OSError("the audit log accepted no data")
+                view = view[written:]
         finally:
             os.close(fd)
 

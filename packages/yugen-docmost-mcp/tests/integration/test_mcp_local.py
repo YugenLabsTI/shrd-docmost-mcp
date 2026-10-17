@@ -4,7 +4,6 @@ Opt-in: DOCMOST_INTEGRATION=1 plus the variables from dev/docmost/.env.test. The
 writes only to the sandbox space.
 """
 
-import json
 import os
 import uuid
 from pathlib import Path
@@ -273,5 +272,4 @@ async def test_resources_prompts_and_moves_over_mcp(tmp_path: Path) -> None:
     summary = activity.structured_content
     assert summary["by_tool"]["create_page"] == {"ok": 2, "error": 0}
     assert summary["by_tool"]["move_page"] == {"ok": 1, "error": 0}
-    assert slug not in json.dumps(summary) or page_text  # ids only, never content
     assert "Hello resources." not in (tmp_path / "audit.jsonl").read_text()
