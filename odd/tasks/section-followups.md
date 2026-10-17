@@ -18,10 +18,10 @@ Assumptions (agent decisions): S1 compares mentions by `(entityType, entityId)` 
 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S1, S6 | inline | done (verifier pending) | L3; commit `65c54d0` |
-| T2 | S3, S4, S5, S6 | inline | done (verifier pending) | L4; commit `fba9de0` |
-| T3 | S2, S6 | inline | done (verifier pending) | L5; commit `4ea4bfb` |
-| T4 | S1-S6 | inline | done (verifier pending) | L6; commit `02dda68` |
+| T1 | S1, S6 | inline | done (verified, L8) | L3; commit `65c54d0` |
+| T2 | S3, S4, S5, S6 | inline | done (verified, L8) | L4; commit `fba9de0` |
+| T3 | S2, S6 | inline | done (verified, L8) | L5; commit `4ea4bfb` |
+| T4 | S1-S6 | inline | done (verified, L8) | L6; commit `02dda68` |
 
 T1 client mention guard that allows mentions already on the page (update_page, edit_section). T2 splicer: duplicate heading ids, NOT_FOUND messages, raw-text elements. T3 server clock from the `Date` header in the sessions, used by the client busy check and the MCP resolver. T4 docs (README, SECURITY, CHANGELOG) and an integration test of the mention round-trip against the local Docmost.
 
@@ -37,3 +37,4 @@ High-risk: T1 (relaxes a security guard), T3 (changes the busy protection). Inde
 - **L6 (2026-10-17, T4 evidence):** integration tests that pretended time passed by patching the local clock failed against the real Docmost (PAGE_BUSY "about 61 seconds"), proving the server clock is used; they now patch `ServerClock.now`. New `test_pages_with_mentions_round_trip_without_new_mentions` (seeds a self-mention through the raw session, html round-trip keeps it, a stranger's mention is refused with no write). Integration 22 passed (one earlier failure came from runs in the same minute, login rate limit); default suite 421 passed, 21 skipped.
 
 - **L7 (2026-10-17, independent verifier):** S1 FAIL with two blockers, S2-S5 PASS. B1: duplicated `data-entity-id` (Python's parser keeps the last, Docmost's happy-dom the first) let a new user mention through html, markdown and edit_section — reproduced on local Docmost (stored `STRANGER`). B2: a JSON mention nested in an allowed mention's `content` was not checked; Docmost's `doc.descendants` finds and notifies it. Advisories: A1 a future `Date` (e.g. 2099, or a proxy's clock) switched the busy window off; A3 Docmost dedupes previously mentioned users by node id, the client did not; A5 duplicated `data-entity-type` (covered by B1). Correction: mention elements with duplicated attribute names are unmatched; JSON walk continues inside mention nodes; `page_mentions` keeps the first node per node id; `busy_retry_after` uses min(Docmost clock, local clock) (S2 rewritten). RED: 6 failed; GREEN: 427 passed, 22 skipped; integration 22 passed (tests now advance both clocks); ruff, pyright clean.
+- **L8 (2026-10-17, verifier recheck):** B1, B2, A1, A3, A5 fixed (probed on local Docmost; html/json/edit_section round-trips with an existing mention still accepted). New advisory applied: Docmost's `extractMentions` skips mention nodes without `attrs.id`, so `page_mentions` now ignores id-less mentions too (RED 1 failed, GREEN 428 passed). Remaining advisory, accepted: a page holding two mentions of different users with the same node id cannot be resent unchanged (over-strict, needs a raw API write to produce).

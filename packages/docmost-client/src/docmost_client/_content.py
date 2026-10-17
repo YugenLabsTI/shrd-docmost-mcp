@@ -98,16 +98,15 @@ def mention_keys(content: object, format: ContentFormat) -> list[MentionKey | No
 def page_mentions(content: object, format: ContentFormat) -> set[MentionKey]:
     """Who Docmost counts as already mentioned on a page.
 
-    Docmost keeps only the first mention node with each node id when it builds that
-    list, so later nodes reusing an id do not count.
+    Docmost skips mention nodes without a node id and keeps only the first node with
+    each id when it builds that list, so neither counts here.
     """
     seen: set[str] = set()
     keys: set[MentionKey] = set()
     for node_id, key in _mentions(content, format):
-        if node_id is not None:
-            if node_id in seen:
-                continue
-            seen.add(node_id)
+        if node_id is None or node_id in seen:
+            continue
+        seen.add(node_id)
         if key is not None:
             keys.add(key)
     return keys

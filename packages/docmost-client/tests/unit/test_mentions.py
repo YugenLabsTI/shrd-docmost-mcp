@@ -245,3 +245,18 @@ def test_page_mentions_count_only_the_first_node_with_each_id(
         client.update_page(PAGE_ID, content=doc(fresh), operation="replace", format="json")
 
     assert api.routes["update"].call_count == 0
+
+
+def test_page_mentions_without_a_node_id_do_not_count(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    # Docmost ignores mention nodes without an id when listing who was mentioned before.
+    id_less = {"type": "mention", "attrs": {"entityType": "user", "entityId": BO}}
+    serve(api, {"json": doc(id_less)})
+
+    with pytest.raises(InvalidRequestError, match="not already on the page"):
+        client.update_page(
+            PAGE_ID, content=doc(mention_json(BO, "Bo")), operation="replace", format="json"
+        )
+
+    assert api.routes["update"].call_count == 0
