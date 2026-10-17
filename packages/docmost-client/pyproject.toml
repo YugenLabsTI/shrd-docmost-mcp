@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Unofficial typed Python client for the internal API of self-hosted Docmost Community Edition."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Yugen Labs" }]
 keywords = ["docmost", "wiki", "client", "api"]
 classifiers = [

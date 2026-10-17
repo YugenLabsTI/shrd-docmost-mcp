@@ -346,4 +346,7 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## License
 
-To be decided before the first public release.
+[Apache License 2.0](LICENSE) for both packages. Copyright Yugen Labs.
+
+This project is not affiliated with or endorsed by Docmost. It talks to Docmost only
+through its HTTP API and does not include Docmost code.
