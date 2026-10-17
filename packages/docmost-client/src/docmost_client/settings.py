@@ -35,6 +35,7 @@ class DocmostSettings(BaseModel):
     password: SecretStr
     read_only: bool = True
     allow_comments: bool = False
+    allow_move: bool = False
     allowed_spaces: frozenset[str] | None = None
     allow_insecure_http: bool = False
     allow_untested_version: bool = False
@@ -54,6 +55,8 @@ class DocmostSettings(BaseModel):
             DOCMOST_READ_ONLY: defaults to true; set to false to allow page writes.
             DOCMOST_ALLOW_COMMENTS: defaults to false; set to true to allow adding
                 comments, independently of DOCMOST_READ_ONLY.
+            DOCMOST_ALLOW_MOVE: defaults to false; set to true to allow moving pages
+                (also needs DOCMOST_READ_ONLY=0).
             DOCMOST_ALLOWED_SPACES: comma-separated space slugs or IDs; unset means
                 every space the account can access.
             DOCMOST_ALLOW_INSECURE_HTTP: allow ``http://`` base URLs (local development).
@@ -72,6 +75,7 @@ class DocmostSettings(BaseModel):
             password=SecretStr(_secret_or_file(env, "DOCMOST_PASSWORD")),
             read_only=env_flag(env, "DOCMOST_READ_ONLY", default=True),
             allow_comments=env_flag(env, "DOCMOST_ALLOW_COMMENTS", default=False),
+            allow_move=env_flag(env, "DOCMOST_ALLOW_MOVE", default=False),
             allowed_spaces=_allowed_spaces(env),
             allow_insecure_http=allow_insecure_http,
             allow_untested_version=env_flag(env, "DOCMOST_ALLOW_UNTESTED_VERSION", default=False),

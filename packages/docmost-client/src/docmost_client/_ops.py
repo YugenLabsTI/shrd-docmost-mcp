@@ -10,7 +10,7 @@ import json
 import re
 from collections.abc import Awaitable, Callable, Generator
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypeVar, cast
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -23,12 +23,14 @@ from docmost_client._content import (
     page_mentions,
     top_level_headings,
 )
+from docmost_client._positions import key_between
 from docmost_client._sections import SECTION_OPERATIONS, SectionOperation, splice_section
 from docmost_client.errors import (
     ClockSkewError,
     CommentsDisabledError,
     DocmostError,
     InvalidRequestError,
+    MoveDisabledError,
     NotFoundError,
     PageBusyError,
     PermissionDeniedError,
@@ -500,6 +502,125 @@ def edit_section(
         {"pageId": current.id, "content": new_html, "operation": "replace", "format": "html"},
     )
     return _parse(Page, {**_object(data), "format": "html"})
+
+
+MovePlacement = Literal["start", "end"]
+MOVE_PLACEMENTS: tuple[MovePlacement, ...] = ("start", "end")
+# Siblings are listed to place the page; bound the listing like the tree resource does.
+MAX_SIBLING_REQUESTS = 50
+
+
+def move_page(
+    settings: DocmostSettings,
+    allowlist: SpaceAllowlist,
+    page_id: str,
+    *,
+    parent_page_id: str | None,
+    after_page_id: str | None,
+    placement: MovePlacement,
+    expected_updated_at: datetime,
+) -> Op[Page]:
+    """Move a page under ``parent_page_id`` (None: the space root) and place it.
+
+    ``after_page_id`` puts it right after that sibling; otherwise ``placement`` puts it
+    first or last. Docmost only moves pages within their space.
+    """
+    _require_writable(settings)
+    if not settings.allow_move:
+        raise MoveDisabledError("Moving pages is disabled; set DOCMOST_ALLOW_MOVE=1 to enable it.")
+    if placement not in MOVE_PLACEMENTS:
+        raise InvalidRequestError(f"placement must be one of: {', '.join(MOVE_PLACEMENTS)}.")
+    if after_page_id and placement != "end":
+        raise InvalidRequestError("Give either after_page_id or placement=start, not both.")
+    if expected_updated_at.utcoffset() is None:
+        raise InvalidRequestError(
+            "expected_updated_at must include a timezone (use the updated_at returned by get_page)."
+        )
+
+    current = yield from get_page(allowlist, page_id, "markdown")
+    if current.is_locked:
+        raise PermissionDeniedError("The page is locked; unlock it in Docmost before moving it.")
+    if current.can_edit is False:
+        raise PermissionDeniedError("The account cannot edit this page.")
+    if current.updated_at != expected_updated_at:
+        raise StalePageError(
+            "The page changed since it was read: it was updated at "
+            f"{current.updated_at.isoformat()}, not {expected_updated_at.isoformat()}. "
+            "Read it again and retry the move.",
+            current_updated_at=current.updated_at,
+        )
+
+    parent: Page | None = None
+    if parent_page_id:
+        parent = yield from get_page(allowlist, parent_page_id, "markdown")
+        if parent.id == current.id:
+            raise InvalidRequestError("A page cannot be its own parent.")
+        if parent.space_id != current.space_id:
+            raise InvalidRequestError(
+                "Docmost only moves pages within the same space; the new parent is elsewhere."
+            )
+        if parent.can_edit is False:
+            raise PermissionDeniedError("The account cannot edit the new parent page.")
+
+    siblings = yield from _siblings(allowlist, current, parent)
+    position = _place(siblings, after_page_id, placement)
+    # Always send parentPageId: Docmost moves a nested page to the root when it is omitted.
+    yield (
+        "/pages/move",
+        {
+            "pageId": current.id,
+            "position": position,
+            "parentPageId": parent.id if parent is not None else None,
+        },
+    )
+    return (yield from get_page(allowlist, current.id, "markdown"))
+
+
+def _siblings(allowlist: SpaceAllowlist, page: Page, parent: Page | None) -> Op[list[PageSummary]]:
+    """The pages under ``parent`` (or the space root), in Docmost's order, without ``page``."""
+    found: list[PageSummary] = []
+    cursor: str | None = None
+    for _ in range(MAX_SIBLING_REQUESTS):
+        listed = yield from list_children(
+            allowlist,
+            page.space_id if parent is None else None,
+            parent.id if parent is not None else None,
+            MAX_PAGE_SIZE,
+            cursor,
+        )
+        found.extend(listed.items)
+        if not listed.has_next_page or not listed.next_cursor:
+            break
+        cursor = listed.next_cursor
+    else:
+        raise InvalidRequestError("The new parent has too many pages to place this one among them.")
+    others = [sibling for sibling in found if sibling.id != page.id]
+    if any(sibling.position is None for sibling in others):
+        raise UpstreamError("Docmost did not return the positions of the sibling pages.")
+    return sorted(others, key=lambda sibling: (sibling.position or "", sibling.id))
+
+
+def _place(siblings: list[PageSummary], after_page_id: str | None, placement: MovePlacement) -> str:
+    positions = [sibling.position or "" for sibling in siblings]
+    if after_page_id:
+        index = next(
+            (
+                i
+                for i, sibling in enumerate(siblings)
+                if after_page_id in (sibling.id, sibling.slug_id)
+            ),
+            None,
+        )
+        if index is None:
+            raise InvalidRequestError(
+                "after_page_id must be a page directly under the new parent (list them with "
+                "list_children)."
+            )
+        upper = positions[index + 1] if index + 1 < len(positions) else None
+        return key_between(positions[index], upper)
+    if placement == "start":
+        return key_between(None, positions[0] if positions else None)
+    return key_between(positions[-1] if positions else None, None)
 
 
 def _require_writable(settings: DocmostSettings) -> None:

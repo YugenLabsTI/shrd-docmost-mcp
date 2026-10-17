@@ -84,6 +84,8 @@ class Page(_Model):
     title: str | None = None
     icon: str | None = None
     parent_page_id: str | None = None
+    # Sibling order key (Docmost fractional index), compared as plain strings.
+    position: str | None = None
     space_id: str
     space: SpaceRef | None = None
     is_locked: bool = False
@@ -105,6 +107,8 @@ class PageSummary(_Model):
     title: str | None = None
     icon: str | None = None
     parent_page_id: str | None = None
+    # Sibling order key (Docmost fractional index), compared as plain strings.
+    position: str | None = None
     space_id: str
     has_children: bool = False
     can_edit: bool | None = None
