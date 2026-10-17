@@ -35,9 +35,10 @@ from docmost_client.settings import env_flag
 
 MAX_PROMPT_FILES = 100
 MAX_PROMPT_FILE_BYTES = 64 * 1024
-_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-_ARGUMENT = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
+_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
+_ARGUMENT = re.compile(r"[a-z_][a-z0-9_]{0,63}")
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}\s]*)\s*\}\}")
+_POSITION = re.compile(r"\(at line \d+, column \d+\)")
 _FILE_KEYS = frozenset({"name", "title", "description", "template", "arguments"})
 _ARGUMENT_KEYS = frozenset({"name", "description", "required", "default"})
 
@@ -83,7 +84,7 @@ def parse_prompt(data: Mapping[str, Any], source: str) -> PromptSpec:
     if unknown:
         raise fail(f"unknown key {unknown[0]!r}; allowed keys: {', '.join(sorted(_FILE_KEYS))}.")
     name = data.get("name")
-    if not isinstance(name, str) or not _NAME.match(name):
+    if not isinstance(name, str) or not _NAME.fullmatch(name):
         raise fail("name must be a string of lowercase letters, digits, '_' or '-'.")
     template = data.get("template")
     if not isinstance(template, str) or not template.strip():
@@ -107,7 +108,7 @@ def parse_prompt(data: Mapping[str, Any], source: str) -> PromptSpec:
     declared = {argument.name for argument in arguments}
     for placeholder in _PLACEHOLDER.findall(template):
         if placeholder not in declared:
-            shown = repr(placeholder) if _ARGUMENT.match(placeholder) else "a placeholder"
+            shown = repr(placeholder) if _ARGUMENT.fullmatch(placeholder) else "a placeholder"
             raise fail(f"template uses {shown}, which is not a declared argument.")
     return PromptSpec(
         name=name,
@@ -126,7 +127,7 @@ def _parse_argument(raw: object, fail: Callable[[str], ConfigError]) -> PromptAr
     if unknown:
         raise fail(f"unknown argument key {unknown[0]!r}.")
     name = values.get("name")
-    if not isinstance(name, str) or not _ARGUMENT.match(name):
+    if not isinstance(name, str) or not _ARGUMENT.fullmatch(name):
         raise fail(
             "argument name must be lowercase letters, digits or '_', not starting with a digit."
         )
@@ -180,8 +181,10 @@ def _read_toml(path: Path) -> dict[str, Any]:
     except UnicodeDecodeError:
         raise ConfigError(f"Prompt file {path.name}: is not valid UTF-8.") from None
     except tomllib.TOMLDecodeError as exc:
-        # The decoder's message points at a line and column, without quoting the file.
-        raise ConfigError(f"Prompt file {path.name}: is not valid TOML ({exc}).") from None
+        # Keep only the position: some decoder messages quote keys from the file.
+        position = _POSITION.search(str(exc))
+        where = f" {position.group(0)}" if position else ""
+        raise ConfigError(f"Prompt file {path.name}: is not valid TOML{where}.") from None
 
 
 BUILTIN_PROMPTS: tuple[PromptSpec, ...] = (
