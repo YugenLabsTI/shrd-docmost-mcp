@@ -197,12 +197,13 @@ async def test_section_editing_over_mcp(monkeypatch: pytest.MonkeyPatch) -> None
 
         from datetime import UTC, datetime, timedelta
 
+        from docmost_client import _ops
         from docmost_client._protocol import ServerClock
 
-        # Pretend two minutes passed on Docmost's clock, so the busy window does not apply.
-        monkeypatch.setattr(
-            ServerClock, "now", lambda self: datetime.now(UTC) + timedelta(minutes=2)
-        )
+        # Pretend two minutes passed on both clocks, so the busy window does not apply.
+        later = lambda *_: datetime.now(UTC) + timedelta(minutes=2)  # noqa: E731
+        monkeypatch.setattr(ServerClock, "now", later)
+        monkeypatch.setattr(_ops, "_utcnow", later)
         done = await client.call_tool("edit_section", edit)
         assert done.is_error is False
         assert len(asked) == 1

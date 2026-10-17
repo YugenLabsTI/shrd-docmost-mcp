@@ -422,10 +422,12 @@ def _utcnow() -> datetime:
 def busy_retry_after(updated_at: datetime, now: datetime | None = None) -> int | None:
     """Seconds to wait before a whole-page rewrite, or None when the page is quiet.
 
-    ``now`` should be Docmost's clock (``updated_at`` is stamped by it); the local clock
-    is the fallback.
+    ``now`` should be Docmost's clock (``updated_at`` is stamped by it). The earlier of it
+    and the local clock is used, so a wrong clock on either side can only make the
+    window longer, never switch it off.
     """
-    age = (now or _utcnow()) - updated_at
+    local = _utcnow()
+    age = (local if now is None else min(now, local)) - updated_at
     if age >= BUSY_WINDOW:
         return None
     return int((BUSY_WINDOW - age).total_seconds()) + 1

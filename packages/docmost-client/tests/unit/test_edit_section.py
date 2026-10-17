@@ -266,10 +266,29 @@ def test_the_busy_window_uses_docmost_s_clock(client: DocmostClient, api: respx.
     assert api.routes["update"].call_count == 0
 
 
-def test_a_local_clock_ahead_of_docmost_does_not_block_a_quiet_page(
-    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "date",
+    [
+        "Fri, 16 Oct 2026 10:10:00 GMT",
+        # A wrong Date (e.g. from a proxy) must not switch the protection off.
+        "Thu, 01 Jan 2099 00:00:00 GMT",
+    ],
+)
+def test_whichever_clock_says_the_page_is_busy_wins(
+    client: DocmostClient, api: respx.MockRouter, monkeypatch: pytest.MonkeyPatch, date: str
 ) -> None:
     monkeypatch.setattr(_ops, "_utcnow", lambda: UPDATED_AT + timedelta(seconds=5))
+    api.routes["info"].mock(return_value=dated(page(), date))
+
+    with pytest.raises(PageBusyError):
+        edit(client)
+
+    assert api.routes["update"].call_count == 0
+
+
+def test_a_page_quiet_on_both_clocks_is_edited(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
     api.routes["info"].mock(return_value=dated(page(), "Fri, 16 Oct 2026 10:10:00 GMT"))
 
     edit(client)

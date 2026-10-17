@@ -11,8 +11,9 @@ All notable changes to this project are documented here. Both packages follow
 - `update_page` and `edit_section` keep mentions already on the page (matched by entity
   type and id) and still refuse new ones, so a page with mentions can be edited round
   trip as html or json. `create_page` still refuses all mentions.
-- The busy window is measured on Docmost's clock, from the `Date` header of its latest
-  response; `busy_retry_after` takes an optional `now`. Client: `server_now()`.
+- The busy window is measured on the earlier of Docmost's clock (from the `Date` header
+  of its latest response) and the local clock; `busy_retry_after` takes an optional
+  `now`. Client: `server_now()`.
 - Section edits refuse new headings that reuse an id already on the page and raw-text
   elements (`script`, `style`, `iframe`, ...); `NOT_FOUND` tells a nested heading apart
   from an id that is not a heading.

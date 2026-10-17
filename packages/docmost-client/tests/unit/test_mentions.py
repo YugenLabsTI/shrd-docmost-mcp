@@ -159,6 +159,19 @@ def test_markdown_mentions_are_checked_against_the_page_as_json(
         (HTML_PAGE + "<p>&lt;span data-type=mention&gt;@Bo&lt;/span&gt;</p>", "html"),
         # A mention without an entity id cannot be matched either.
         (HTML_PAGE + '<p><span data-type="mention" data-id="m1">@Ana</span></p>', "html"),
+        # Docmost keeps the first of duplicated attributes, Python's parser the last.
+        (
+            HTML_PAGE + '<p><span data-type="mention" data-id="m2" data-entity-type="user" '
+            f'data-entity-id="{BO}" data-entity-id="{ANA}">@x</span></p>',
+            "html",
+        ),
+        (
+            '<p><span data-type="mention" data-entity-type="user" '
+            f'data-entity-id="{BO}" data-entity-id="{ANA}">@x</span></p>',
+            "markdown",
+        ),
+        # Docmost finds mentions at any depth, including inside another mention.
+        (doc(mention_json(ANA) | {"content": [mention_json(BO, "Bo")]}), "json"),
     ],
 )
 def test_new_mentions_are_refused_before_writing(
@@ -215,5 +228,20 @@ def test_a_section_edit_may_not_add_a_new_mention(
             content=f"<p>{mention_html(BO, 'Bo')}</p>",
             expected_updated_at=UPDATED_AT,
         )
+
+    assert api.routes["update"].call_count == 0
+
+
+def test_page_mentions_count_only_the_first_node_with_each_id(
+    client: DocmostClient, api: respx.MockRouter
+) -> None:
+    # Docmost builds the "already mentioned" list keeping the first node per node id, so
+    # BO (second node with id m1) is not on the page as far as notifications go.
+    duplicated = doc(mention_json(ANA), mention_json(BO, "Bo"))
+    serve(api, {"json": duplicated})
+    fresh = mention_json(BO, "Bo") | {"attrs": mention_json(BO, "Bo")["attrs"] | {"id": "m9"}}
+
+    with pytest.raises(InvalidRequestError, match="not already on the page"):
+        client.update_page(PAGE_ID, content=doc(fresh), operation="replace", format="json")
 
     assert api.routes["update"].call_count == 0

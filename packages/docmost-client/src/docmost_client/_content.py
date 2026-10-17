@@ -92,35 +92,66 @@ def check_mentions(
 
 def mention_keys(content: object, format: ContentFormat) -> list[MentionKey | None]:
     """One entry per mention in ``content``; None when it cannot be matched to a user or page."""
+    return [key for _, key in _mentions(content, format)]
+
+
+def page_mentions(content: object, format: ContentFormat) -> set[MentionKey]:
+    """Who Docmost counts as already mentioned on a page.
+
+    Docmost keeps only the first mention node with each node id when it builds that
+    list, so later nodes reusing an id do not count.
+    """
+    seen: set[str] = set()
+    keys: set[MentionKey] = set()
+    for node_id, key in _mentions(content, format):
+        if node_id is not None:
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+# (node id, key) of each mention, in document order.
+_Mention = tuple[str | None, MentionKey | None]
+
+
+def _mentions(content: object, format: ContentFormat) -> list[_Mention]:
     if format == "json":
-        return [_json_key(node) for node in _json_mentions(content)]
+        return [_json_mention(node) for node in _json_mentions(content)]
     if not isinstance(content, str):
         return []
     collector = _MentionCollector()
     collector.feed(content)
     collector.close()
-    keys: list[MentionKey | None] = [
-        _key(a.get("data-entity-type"), a.get("data-entity-id")) for a in collector.found
-    ]
     # Markup the parser does not see as an element (entity-encoded, malformed) may still
     # become a mention in Docmost, which decodes entities first: never let it through.
-    hidden = len(_MENTION_MARKUP.findall(html.unescape(content))) - len(keys)
-    return keys + [None] * max(hidden, 0)
-
-
-def page_mentions(content: object, format: ContentFormat) -> set[MentionKey]:
-    return {key for key in mention_keys(content, format) if key is not None}
+    hidden = len(_MENTION_MARKUP.findall(html.unescape(content))) - len(collector.found)
+    return collector.found + [(None, None)] * max(hidden, 0)
 
 
 class _MentionCollector(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.found: list[dict[str, str | None]] = []
+        self.found: list[_Mention] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not any(
+            name == "data-type" and (value or "").lower() == "mention" for name, value in attrs
+        ):
+            return
+        names = [name for name, _ in attrs]
+        if len(set(names)) != len(names):
+            # Docmost keeps the first of duplicated attributes, this parser the last:
+            # such a mention cannot be matched reliably.
+            self.found.append((None, None))
+            return
         values = dict(attrs)
-        if (values.get("data-type") or "").lower() == "mention":
-            self.found.append(values)
+        node_id = values.get("data-id")
+        self.found.append(
+            (node_id or None, _key(values.get("data-entity-type"), values.get("data-entity-id")))
+        )
 
     handle_startendtag = handle_starttag
 
@@ -131,20 +162,24 @@ def _key(entity_type: object, entity_id: object) -> MentionKey | None:
     return (entity_type if isinstance(entity_type, str) else None, entity_id)
 
 
-def _json_key(node: dict[str, Any]) -> MentionKey | None:
+def _json_mention(node: dict[str, Any]) -> _Mention:
     attrs = node.get("attrs")
     if not isinstance(attrs, dict):
-        return None
+        return (None, None)
     values = cast(dict[str, Any], attrs)
-    return _key(values.get("entityType"), values.get("entityId"))
+    node_id = values.get("id")
+    return (
+        node_id if isinstance(node_id, str) and node_id else None,
+        _key(values.get("entityType"), values.get("entityId")),
+    )
 
 
 def _json_mentions(node: object) -> list[dict[str, Any]]:
+    """Every mention node at any depth (Docmost walks all descendants, mentions included)."""
     if isinstance(node, dict):
         mapping = cast(dict[str, Any], node)
-        if mapping.get("type") == "mention":
-            return [mapping]
-        return [found for value in mapping.values() for found in _json_mentions(value)]
+        found = [mapping] if mapping.get("type") == "mention" else []
+        return found + [inner for value in mapping.values() for inner in _json_mentions(value)]
     if isinstance(node, list):
         return [found for item in cast(list[Any], node) for found in _json_mentions(item)]
     return []
