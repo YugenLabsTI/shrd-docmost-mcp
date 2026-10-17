@@ -6,6 +6,7 @@ writes only to the sandbox space.
 
 import os
 import uuid
+from pathlib import Path
 from typing import Any
 
 import mcp_types
@@ -14,6 +15,7 @@ from mcp import Client, MCPError
 
 from docmost_client import DocmostSettings
 from yugen_docmost_mcp.__main__ import create_server
+from yugen_docmost_mcp.audit import AuditLog
 
 pytestmark = [
     pytest.mark.integration,
@@ -212,13 +214,16 @@ async def test_section_editing_over_mcp(monkeypatch: pytest.MonkeyPatch) -> None
         assert "Second." not in done.structured_content["content"]
 
 
-async def test_resources_prompts_and_moves_over_mcp() -> None:
+async def test_resources_prompts_and_moves_over_mcp(tmp_path: Path) -> None:
     title = f"Resources {uuid.uuid4().hex[:8]}"
     # One session for resources, prompts and move_page: Docmost allows 10 logins a minute.
     writer = settings(
         DOCMOST_READ_ONLY="0", DOCMOST_ALLOW_MOVE="1", DOCMOST_ALLOWED_SPACES="sandbox"
     )
-    async with Client(create_server(writer)) as client:
+    # The same session is audited, and the agent summarizes its own activity at the end.
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = create_server(writer, audit=audit, expose_audit=True)
+    async with Client(server) as client:
         created = await client.call_tool(
             "create_page", {"space": "sandbox", "title": title, "content": "Hello resources."}
         )
@@ -248,6 +253,7 @@ async def test_resources_prompts_and_moves_over_mcp() -> None:
         children = await client.call_tool(
             "list_children", {"parent_page_id": parent.structured_content["id"]}
         )
+        activity = await client.call_tool("audit_summary", {"since_hours": 1})
 
     page_text = page.contents[0].text  # type: ignore[union-attr]
     assert page_text.startswith(f"# {title}\n")
@@ -263,3 +269,7 @@ async def test_resources_prompts_and_moves_over_mcp() -> None:
     assert moved.is_error is False, moved.structured_content
     assert moved.structured_content["parent_page_id"] == parent.structured_content["id"]
     assert [p["slug_id"] for p in children.structured_content["pages"]] == [slug]
+    summary = activity.structured_content
+    assert summary["by_tool"]["create_page"] == {"ok": 2, "error": 0}
+    assert summary["by_tool"]["move_page"] == {"ok": 1, "error": 0}
+    assert "Hello resources." not in (tmp_path / "audit.jsonl").read_text()

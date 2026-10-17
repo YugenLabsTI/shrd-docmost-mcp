@@ -60,6 +60,9 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_ALLOW_UNTESTED_VERSION` | `0` | Connect to a Docmost version not in the compatibility matrix. |
 | `DOCMOST_TIMEOUT_SECONDS` | `30` | Per-request timeout. |
 | `DOCMOST_MAX_CONTENT_BYTES` | `1000000` | Largest content a write may send (encoded size). |
+| `DOCMOST_AUDIT_LOG` | unset | File where every write, comment, move and refused attempt is recorded (see [Audit log](#audit-log)). Unset: no audit file. |
+| `DOCMOST_AUDIT_READS` | `0` | Also record read tools. Needs `DOCMOST_AUDIT_LOG`. |
+| `DOCMOST_AUDIT_EXPOSE` | `0` | Offer the read-only `audit_summary` tool to the agent. Needs `DOCMOST_AUDIT_LOG`. |
 | `DOCMOST_BUILTIN_PROMPTS` | `1` | Offer the generic `summarize_page` and `answer_from_wiki` prompts. `0` hides them. |
 | `DOCMOST_PROMPTS_DIR` | unset | Directory of team prompt files (`*.toml`, see [MCP prompts](#mcp-prompts)). |
 | `DOCMOST_BUSY_WINDOW_SECONDS` | `60` | `edit_section` refuses pages saved this recently (`PAGE_BUSY`). From `45` (Docmost's editor save delay) to `86400`. |
@@ -161,7 +164,7 @@ Failures return `is_error: true` with
 `{"error": {"code": "...", "message": "...", "retryable": false}}`. Arguments that do not
 match a tool's input schema (missing, wrong type, out of range) are rejected by the MCP
 SDK before the tool runs, with an untyped error message. Codes:
-`READ_ONLY`, `COMMENTS_DISABLED`, `MOVE_DISABLED`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
+`READ_ONLY`, `COMMENTS_DISABLED`, `MOVE_DISABLED`, `AUDIT_UNAVAILABLE`, `CONFIRMATION_DECLINED`, `CONFIRMATION_UNAVAILABLE`,
 `PAGE_BUSY`, `CLOCK_SKEW`,
 `SPACE_NOT_ALLOWED`, `STALE_PAGE`, `NOT_FOUND`, `FORBIDDEN`,
 `INVALID_INPUT`, `AUTH_FAILED`, `RATE_LIMITED`, `UPSTREAM_ERROR`,
@@ -235,6 +238,44 @@ default = "neutral"                # optional arguments only
   each. Any invalid file, duplicate name or a name that clashes with a built-in prompt
   stops the server at startup with an error naming the file (never its template).
 - [`examples/prompts/`](examples/prompts) has a complete example.
+
+## Audit log
+
+With `DOCMOST_AUDIT_LOG=/var/log/docmost-mcp/audit.jsonl` the server appends one JSON line
+per event to that file (created with mode `0600`): every write, comment and move, and
+every refused attempt (a declined confirmation, `PAGE_BUSY`, `FORBIDDEN`, ...). Reads are
+added with `DOCMOST_AUDIT_READS=1`. Calls the MCP layer rejects before they reach a tool
+(arguments that break the tool's input schema, unknown tool names) are not recorded.
+
+```json
+{"ts":"2026-10-17T10:05:00+00:00","session":"3f2a9c1b7d4e","call":"9b1c...","phase":"finished",
+ "tool":"update_page","kind":"write","args":{"page_id":"...","operation":"replace","format":"html"},
+ "outcome":"error","code":"CONFIRMATION_DECLINED","duration_ms":2100}
+```
+
+- Only ids and enum-like arguments are kept (`page_id`, `space`, `parent_page_id`,
+  `operation`, `format`, `heading_id`, `after_page_id`, `placement`, `parent_comment_id`).
+  Page content, titles, comment text, search queries and icons are never written. Values
+  are cut to 128 characters, and control, formatting and line-separator characters are
+  replaced by spaces so they cannot disguise the report.
+- A write records a `started` line first; if that cannot be written, the write is refused
+  with `AUDIT_UNAVAILABLE` and nothing changes in Docmost. A `started` line without its
+  `finished` line marks a call that was interrupted.
+- The server does not start when the file cannot be created or appended to. A file that
+  already exists keeps its permissions. It never
+  rotates the file: use logrotate with `copytruncate`, or similar.
+
+Operators read it with the report command, independently of the agent:
+
+```bash
+yugen-docmost-mcp audit report --since 7d          # uses DOCMOST_AUDIT_LOG
+yugen-docmost-mcp audit report --file audit.jsonl --json
+```
+
+With `DOCMOST_AUDIT_EXPOSE=1` the agent also gets `audit_summary(since_hours)`, a read-only
+tool with the same counts, so it can answer "what did you change this week?" from data.
+The report is the trusted view: the agent can summarize, but it does not replace reading
+the log.
 
 ## Security model
 

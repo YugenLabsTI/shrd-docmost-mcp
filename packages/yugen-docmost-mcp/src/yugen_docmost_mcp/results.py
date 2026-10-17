@@ -250,3 +250,17 @@ def error_result(exc: DocmostError) -> CallToolResult:
 def _iso(value: datetime) -> str:
     text = value.isoformat()
     return text[:-6] + "Z" if text.endswith("+00:00") else text
+
+
+class AuditSummaryResult(_Result):
+    """What the audit log recorded in a span (see ``yugen_docmost_mcp.audit``)."""
+
+    calls: int
+    first: str | None
+    last: str | None
+    by_tool: dict[str, dict[str, int]]
+    errors_by_code: dict[str, int]
+    spaces: dict[str, int]
+    pages_written: list[str]
+    pages_refused: list[str]
+    interrupted: list[dict[str, str]]

@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import mcp_types
@@ -31,6 +32,7 @@ from docmost_client import (
     UnsupportedVersionError,
     UpstreamError,
 )
+from yugen_docmost_mcp.audit import AuditLog
 from yugen_docmost_mcp.server import build_server
 
 pytestmark = pytest.mark.anyio
@@ -1187,3 +1189,106 @@ async def test_move_page_errors_are_typed(wiki: FakeWiki) -> None:
 
     assert result.structured_content["error"]["code"] == "MOVE_DISABLED"
     assert result.structured_content["error"]["retryable"] is False
+
+
+# --- audit ---------------------------------------------------------------------------
+
+
+def audit_lines(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+async def test_write_calls_are_audited_before_and_after(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = build_server(wiki, writer=wiki, audit=audit)
+
+    await call(server, "create_page", space="engineering", title="SECRET title", content="SECRET")
+
+    started, finished = audit_lines(tmp_path / "audit.jsonl")
+    assert (started["phase"], started["tool"], started["args"]) == (
+        "started",
+        "create_page",
+        {"space": "engineering", "format": "markdown"},
+    )
+    assert finished["outcome"] == "ok"
+    assert finished["result_page_id"] == "p1"
+    assert started["call"] == finished["call"]
+    assert "SECRET" not in (tmp_path / "audit.jsonl").read_text()
+
+
+async def test_refused_writes_are_audited_with_their_code(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+
+    await _replace(build_server(wiki, writer=wiki, audit=audit), decline)
+
+    finished = audit_lines(tmp_path / "audit.jsonl")[-1]
+    assert finished["tool"] == "update_page"
+    assert finished["outcome"] == "error"
+    assert finished["code"] == "CONFIRMATION_DECLINED"
+    assert finished["args"] == {"page_id": "p1", "operation": "replace", "format": "markdown"}
+
+
+@pytest.mark.parametrize(("reads", "expected"), [(False, 0), (True, 1)])
+async def test_reads_are_audited_only_when_asked(
+    wiki: FakeWiki, tmp_path: Path, reads: bool, expected: int
+) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl", reads=reads)
+
+    await call(build_server(wiki, writer=None, audit=audit), "get_page", page_id="p1")
+
+    assert len(audit_lines(tmp_path / "audit.jsonl")) == expected
+
+
+async def test_a_write_that_cannot_be_audited_is_refused(
+    wiki: FakeWiki, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+
+    def broken(*args: Any, **kwargs: Any) -> int:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("yugen_docmost_mcp.audit.os.open", broken)
+    result = await call(
+        build_server(wiki, writer=wiki, audit=audit), "create_page", space="eng", title="x"
+    )
+
+    assert result.structured_content["error"]["code"] == "AUDIT_UNAVAILABLE"
+    assert not any(name == "create_page" for name, _ in wiki.calls)
+
+
+async def test_audit_summary_exists_only_when_exposed(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+
+    async with Client(build_server(wiki, writer=wiki, audit=audit)) as client:
+        hidden = {t.name for t in (await client.list_tools()).tools}
+    async with Client(build_server(wiki, writer=wiki, audit=audit, expose_audit=True)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+
+    assert "audit_summary" not in hidden
+    assert tools["audit_summary"].annotations.read_only_hint is True  # type: ignore[union-attr]
+
+
+async def test_audit_summary_reports_recent_activity(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = build_server(wiki, writer=wiki, audit=audit, expose_audit=True)
+
+    await call(server, "create_page", space="engineering", title="x")
+    await _replace(server, decline)
+    result = await call(server, "audit_summary", since_hours=24)
+
+    summary = result.structured_content
+    assert result.is_error is False
+    assert summary["calls"] == 2
+    assert summary["by_tool"]["create_page"] == {"ok": 1, "error": 0}
+    assert summary["errors_by_code"] == {"CONFIRMATION_DECLINED": 1}
+    assert summary["pages_written"] == ["p1"]
+
+
+async def test_audit_summary_reports_an_unreadable_log(wiki: FakeWiki, tmp_path: Path) -> None:
+    audit = AuditLog.open(tmp_path / "audit.jsonl")
+    server = build_server(wiki, writer=None, audit=audit, expose_audit=True)
+    (tmp_path / "audit.jsonl").unlink()
+
+    result = await call(server, "audit_summary")
+
+    assert result.structured_content["error"]["code"] == "AUDIT_UNAVAILABLE"

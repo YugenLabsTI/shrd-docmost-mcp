@@ -237,3 +237,36 @@ async def test_move_page_needs_writes_and_its_flag(
         names = {tool.name for tool in (await client.list_tools()).tools}
 
     assert ("move_page" in names) is has_move
+
+
+def test_an_audit_log_that_cannot_be_opened_stops_startup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    for key, value in {
+        "DOCMOST_BASE_URL": BASE,
+        "DOCMOST_EMAIL": "bot@example.com",
+        "DOCMOST_PASSWORD": PASSWORD,
+        "DOCMOST_AUDIT_LOG": str(tmp_path / "missing" / "audit.jsonl"),
+    }.items():
+        monkeypatch.setenv(key, value)
+
+    with pytest.raises(SystemExit) as exc:
+        main([])
+
+    assert exc.value.code == 2
+    assert "DOCMOST_AUDIT_LOG" in capsys.readouterr().err
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("expose", "has_tool"), [("0", False), ("1", True)])
+async def test_audit_summary_follows_its_flag(tmp_path: Path, expose: str, has_tool: bool) -> None:
+    from yugen_docmost_mcp.__main__ import audit_from_env
+
+    audit, exposed = audit_from_env(
+        {"DOCMOST_AUDIT_LOG": str(tmp_path / "a.jsonl"), "DOCMOST_AUDIT_EXPOSE": expose}
+    )
+    server = create_server(settings(), audit=audit, expose_audit=exposed)
+    async with Client(server) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+
+    assert ("audit_summary" in names) is has_tool
