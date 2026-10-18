@@ -434,8 +434,8 @@ accepts one pending publisher per configuration at a time. So the first time, pu
 pull request that releases the server: its automatic publication would fail for the
 server (re-run it once the publishers exist; files already uploaded are skipped).
 
-Release tags are protected: a ruleset forbids moving or deleting `*-v*` tags, so a
-published version always matches its tag.
+Release tags are protected: a ruleset forbids moving or deleting `docmost-client-v*` and
+`yugen-docmost-mcp-v*` tags, so a published version always matches its tag.
 
 ## License
 

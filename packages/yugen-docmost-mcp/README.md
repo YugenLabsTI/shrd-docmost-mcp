@@ -13,8 +13,10 @@ yugen-docmost-mcp
 ```
 
 Read tools: `search`, `list_spaces`, `list_children`, `get_page`, `get_page_outline`,
-`list_recent_pages` and `list_comments`. Only when enabled: `add_comment`, `create_page`,
-`update_page`, `edit_section` and `move_page`.
+`list_recent_pages` and `list_comments`. Writes are off by default: `DOCMOST_READ_ONLY=0`
+enables `create_page`, `update_page` and `edit_section`; `DOCMOST_ALLOW_COMMENTS=1`
+enables `add_comment`; `DOCMOST_ALLOW_MOVE=1` (with `DOCMOST_READ_ONLY=0`) enables
+`move_page`.
 
 See the [project README](https://github.com/YugenLabsTI/shrd-docmost-mcp#readme) for configuration, the tool reference, the
 security model, and the compatibility matrix.
