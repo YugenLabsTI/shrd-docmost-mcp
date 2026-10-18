@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -24,9 +25,14 @@ REFERENCE = re.compile(
 )
 # Text that does not count: HTML comments (also one left open), fenced code blocks and
 # inline code, where GitHub does not link issues either.
+# A fence opens only on a line of its own (```lang); ```code``` on one line is inline.
 IGNORED = re.compile(
-    r"<!--.*?(?:-->|\Z)|^ {0,3}(```|~~~).*?(?:^ {0,3}\1|\Z)|`[^`\n]*`", re.DOTALL | re.MULTILINE
+    r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,})[^`\n]*$.*?(?:^ {0,3}\1|\Z)|`[^`\n]*`",
+    re.DOTALL | re.MULTILINE,
 )
+# GitHub API answers worth another try: server errors and rate limits.
+RETRY_STATUS = frozenset({403, 429, 500, 502, 503, 504})
+ATTEMPTS = 3
 HOW_TO_LINK = (
     "Link the issue this pull request implements in its description, with one of:\n"
     "  Closes #<number>   (closes the issue on merge; also Fixes or Resolves)\n"
@@ -78,18 +84,34 @@ def fetch_from_github(number: int) -> Issue | None:
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    try:
-        # Fixed https URL to the GitHub API.
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code in (404, 410):
-            return None
-        raise
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            # Fixed https URL to the GitHub API.
+            with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code in (404, 410):
+                return None
+            # A 403 is a rate limit only when GitHub says so; otherwise it is final.
+            limited = error.code != 403 or error.headers.get("x-ratelimit-remaining") == "0"
+            if error.code not in RETRY_STATUS or not limited or attempt == ATTEMPTS:
+                raise
+        except urllib.error.URLError:
+            if attempt == ATTEMPTS:
+                raise
+        time.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
 
 def main(fetch: Fetch = fetch_from_github) -> int:
-    ok, message = check(os.environ.get("PR_BODY", ""), os.environ["PR_AUTHOR"], fetch)
+    try:
+        ok, message = check(os.environ.get("PR_BODY", ""), os.environ["PR_AUTHOR"], fetch)
+    except urllib.error.URLError as error:
+        # Fail closed, with a reason instead of a traceback.
+        sys.stdout.write(
+            f"Could not read the linked issues from GitHub ({error}); re-run this check.\n"
+        )
+        return 1
     sys.stdout.write(message + "\n")
     return 0 if ok else 1
 

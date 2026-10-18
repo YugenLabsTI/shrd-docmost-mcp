@@ -429,7 +429,9 @@ merging. A ruleset on `main` requires a pull request whose lint, test, audit, bu
 `status:approved` (see [CONTRIBUTING.md](CONTRIBUTING.md#issues-first)); it passes the
 release App's and Dependabot's pull requests without one. The exempt accounts are listed
 by login in `.github/scripts/check_issue_link.py`, so renaming the App means updating
-that list.
+that list. The check always runs from `main`, so a broken check there also judges the
+pull request that fixes it: remove `issue` from the ruleset's required checks, merge the
+fix, then require it again.
 
 Publishing needs, on both PyPI and TestPyPI, a trusted publisher for each project
 (owner `YugenLabsTI`, repository `shrd-docmost-mcp`, workflow `publish.yml`, environment

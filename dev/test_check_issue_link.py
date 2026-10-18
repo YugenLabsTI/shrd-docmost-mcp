@@ -49,6 +49,7 @@ APPROVED = issue("status:approved", "bug")
         "Some context.\n\nCloses #7.",
         "```\nCloses #8\n```\nCloses #7",
         "`Closes #8` is the syntax.\nCloses #7",
+        "```Closes #8``` inline, not a fence.\nCloses #7",
     ],
 )
 def test_accepts_a_reference_to_an_approved_issue(body: str) -> None:
@@ -113,8 +114,8 @@ def test_every_referenced_issue_must_be_approved() -> None:
     ok, message = check_issue_link.check("Closes #7\nRefs #8", "someone", fetcher(issues))
 
     assert not ok
-    assert "#8 is not labelled status:approved yet" in message
-    assert "#7" not in message.split("\n", 1)[1]
+    problems = [line for line in message.splitlines() if line.startswith("  - ")]
+    assert problems == ["  - #8 is not labelled status:approved yet"]
 
 
 def test_a_repeated_reference_is_checked_once() -> None:
@@ -156,10 +157,14 @@ class _Response(io.BytesIO):
         self.close()
 
 
-def _urlopen(outcome: object):
+def _urlopen(*outcomes: object):
+    """urlopen answering each call with the next outcome: an issue or an exception."""
+    remaining = list(outcomes)
+
     def urlopen(request: urllib.request.Request, timeout: float) -> _Response:
         assert request.full_url == "https://api.github.com/repos/owner/repo/issues/7"
         assert request.get_header("Authorization") == "Bearer token"
+        outcome = remaining.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
         return _Response(json.dumps(outcome).encode())
@@ -168,39 +173,91 @@ def _urlopen(outcome: object):
 
 
 @pytest.fixture
-def github(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Seconds slept between attempts; the GitHub environment is set."""
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
     monkeypatch.setenv("GH_TOKEN", "token")
-    return monkeypatch
+    slept: list[float] = []
+    monkeypatch.setattr(check_issue_link.time, "sleep", slept.append)
+    return slept
 
 
-def _http_error(code: int) -> urllib.error.HTTPError:
-    return urllib.error.HTTPError("url", code, "error", Message(), None)
+def _http_error(code: int, **headers: str) -> urllib.error.HTTPError:
+    message = Message()
+    for name, value in headers.items():
+        message[name.replace("_", "-")] = value
+    return urllib.error.HTTPError("url", code, "error", message, None)
 
 
-def test_fetch_returns_the_issue(github: pytest.MonkeyPatch) -> None:
-    github.setattr(urllib.request, "urlopen", _urlopen(APPROVED))
+def test_fetch_returns_the_issue(monkeypatch: pytest.MonkeyPatch, sleeps: list[float]) -> None:
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen(APPROVED))
 
     assert check_issue_link.fetch_from_github(7) == APPROVED
+    assert sleeps == []
 
 
 @pytest.mark.parametrize("code", [404, 410])
-def test_fetch_returns_none_for_a_missing_issue(github: pytest.MonkeyPatch, code: int) -> None:
-    github.setattr(urllib.request, "urlopen", _urlopen(_http_error(code)))
+def test_fetch_returns_none_for_a_missing_issue(
+    monkeypatch: pytest.MonkeyPatch, sleeps: list[float], code: int
+) -> None:
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen(_http_error(code)))
 
     assert check_issue_link.fetch_from_github(7) is None
 
 
 @pytest.mark.parametrize(
-    "error", [_http_error(401), _http_error(500), urllib.error.URLError("unreachable")]
+    "error",
+    [
+        _http_error(503),
+        _http_error(429),
+        _http_error(403, x_ratelimit_remaining="0"),
+        urllib.error.URLError("unreachable"),
+    ],
 )
-def test_fetch_fails_closed_on_any_other_error(
-    github: pytest.MonkeyPatch, error: Exception
+def test_fetch_retries_a_transient_failure(
+    monkeypatch: pytest.MonkeyPatch, sleeps: list[float], error: Exception
 ) -> None:
-    github.setattr(urllib.request, "urlopen", _urlopen(error))
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen(error, error, APPROVED))
+
+    assert check_issue_link.fetch_from_github(7) == APPROVED
+    assert sleeps == [2, 4]
+
+
+@pytest.mark.parametrize("error", [_http_error(503), urllib.error.URLError("unreachable")])
+def test_fetch_fails_closed_after_three_attempts(
+    monkeypatch: pytest.MonkeyPatch, sleeps: list[float], error: Exception
+) -> None:
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen(error, error, error))
 
     with pytest.raises(urllib.error.URLError):
         check_issue_link.fetch_from_github(7)
+    assert sleeps == [2, 4]
+
+
+@pytest.mark.parametrize("error", [_http_error(401), _http_error(403), _http_error(422)])
+def test_fetch_fails_at_once_on_a_final_error(
+    monkeypatch: pytest.MonkeyPatch, sleeps: list[float], error: Exception
+) -> None:
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen(error))
+
+    with pytest.raises(urllib.error.HTTPError):
+        check_issue_link.fetch_from_github(7)
+    assert sleeps == []
+
+
+def test_main_explains_a_github_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("PR_BODY", "Closes #7")
+    monkeypatch.setenv("PR_AUTHOR", "someone")
+
+    def fetch(number: int) -> dict[str, Any] | None:
+        raise _http_error(503)
+
+    assert check_issue_link.main(fetch) == 1
+    out = capsys.readouterr().out
+    assert "Could not read the linked issues from GitHub" in out
+    assert "re-run this check" in out
 
 
 def test_main_exits_non_zero_and_prints_why(
