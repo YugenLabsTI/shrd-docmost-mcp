@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/YugenLabsTI/shrd-docmost-mcp/compare/docmost-client-v0.1.0...docmost-client-v0.1.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **packaging:** link the PyPI pages to the project and list every tool ([7b4961b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/7b4961b0eb812a95d19783aed05ed1853afc2690))
+
 ## 0.1.0 (2026-10-18)
 
 

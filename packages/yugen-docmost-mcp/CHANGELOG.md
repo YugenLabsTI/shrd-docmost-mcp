@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1](https://github.com/YugenLabsTI/shrd-docmost-mcp/compare/yugen-docmost-mcp-v0.1.0...yugen-docmost-mcp-v0.1.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **packaging:** link the PyPI pages to the project and list every tool ([7b4961b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/7b4961b0eb812a95d19783aed05ed1853afc2690))
+
+
+### Documentation
+
+* say which settings enable the server's write tools ([884373b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/884373b5011a650fe81b1b361e9b9a25e34208c3))
+
 ## 0.1.0 (2026-10-18)
 
 
