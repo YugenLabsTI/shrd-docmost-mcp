@@ -1,0 +1,31 @@
+# Feature: every pull request links an approved issue
+
+Objective: issues are triaged with `status:*` labels, and a required check refuses pull requests that do not link an issue labelled `status:approved`, for maintainers too; release-please and Dependabot are exempt.
+Branch: `ci/issue-gate`, stacked on `docs/contributing` (PR #53). Delivery: single PR after #53 merges. Test runner: `uv run pytest` (dev/); workflows checked with actionlint and zizmor.
+
+## Specs
+
+- **S1 — Triage labels.** "¿Hay algo al respecto de que un issue necesite ser evaluado y que finalmente se le dé la etiqueta de aprobación o aprobado para desarrollar?" New issues start as `status:needs-review`; a maintainer moves them to `status:approved`, `status:needs-info` or `status:needs-design`.
+- **S2 — Linked approved issue.** "O algo como que todo PR debe estar ligado a un issue?" A pull request must reference an issue with `Closes #N`, `Fixes #N`, `Resolves #N` or `Refs #N` (not inside an HTML comment), and every referenced issue must carry `status:approved`; otherwise the check fails and says why.
+- **S3 — Applies to maintainers.** "Me gusta, porque hacemos de este un mejor producto, aunque también me aplique a mi". Only the release App and Dependabot are exempt.
+- **S4 — Inherited constraints.** No AI attribution, no instance data, pinned actions, least privilege, docs updated with behavior; push, PR, merge and repository settings only with explicit OK.
+
+Assumptions (agent decisions): the check runs on `pull_request_target` from the base branch's code and never checks out or runs the pull request's code, so a pull request cannot rewrite the check that judges it; exemption by exact login, not by account type; a label added to the issue later needs the check re-run (or the description edited); the `issue` check becomes required in the `main` ruleset after merge; no PR size limit for now.
+
+## Tasks
+
+| ID | Specs | Route | Status | Evidence |
+|----|-------|-------|--------|----------|
+| T1 | S2, S3 | inline | in progress | |
+| T2 | S1, S4 | inline | pending | |
+| T3 | S2 | user OK | pending | labels created, ruleset requires `issue` |
+
+T1: `.github/scripts/check_issue_link.py` with tests in `dev/`, workflow `issue-link.yml`. T2: templates add `status:needs-review`, PR template `Closes #`, CONTRIBUTING flow. T3: create the labels, add `issue` to the required checks after merge.
+
+High-risk: T1 (CI guard, `pull_request_target`, items 2 and 5). Independent verifier before the PR.
+
+## Log
+
+- **L1 (2026-10-18, user, verbatim):** "Hacele, abrí el PR y esta vez lo reviso porque quiero ver bien cómo quedaron las plantillas. ¿Hay algo al respecto de que un issue necesite ser evaluado y que finalmente se le dé la etiqueta de aprobación o aprobado para desarrollar? O algo como que todo PR debe estar ligado a un issue? No se, yo me guío bastante del repo de gentle-ai"
+- **L2 (2026-10-18, user, verbatim):** "Me gusta, porque hacemos de este un mejor producto, aunque también me aplique a mi"
+- **L3 (research):** gentle-ai uses labels `status:needs-review`, `status:approved` ("Approved for implementation — PRs can now be opened"), `status:needs-info`, `status:needs-design`, and `pr-check.yml` jobs "Check Issue Reference" (Closes/Fixes/Resolves/Refs #N, HTML comments ignored, fails closed on errors) and "Check Issue Has status:approved".
