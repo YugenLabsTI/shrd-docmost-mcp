@@ -423,8 +423,13 @@ the repository environment `release`, limited to `main`. Limit the environment t
 before storing the key: GitHub creates a missing environment on first use with no branch
 limit. Without the variable and the secret the release job fails, and nothing is
 released. Wait for the release pull request's CI to pass before
-merging. A ruleset on `main` requires a pull request whose lint, test, audit and build
-checks pass, and forbids force pushes and deleting the branch.
+merging. A ruleset on `main` requires a pull request whose lint, test, audit, build and
+`issue` checks pass, and forbids force pushes and deleting the branch. The `issue` check
+([Issue link](.github/workflows/issue-link.yml)) needs a linked issue labelled
+`status:approved` (see [CONTRIBUTING.md](CONTRIBUTING.md#issues-first)); it passes the
+release App's and Dependabot's pull requests without one. The exempt accounts are listed
+by login in `.github/scripts/check_issue_link.py`, so renaming the App means updating
+that list.
 
 Publishing needs, on both PyPI and TestPyPI, a trusted publisher for each project
 (owner `YugenLabsTI`, repository `shrd-docmost-mcp`, workflow `publish.yml`, environment

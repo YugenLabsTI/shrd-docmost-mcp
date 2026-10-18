@@ -16,8 +16,8 @@ Assumptions (agent decisions): the check runs on `pull_request_target` from the 
 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S2, S3 | inline | in progress | |
-| T2 | S1, S4 | inline | pending | |
+| T1 | S2, S3 | inline | done | bb83cef, L4 |
+| T2 | S1, S4 | inline | done | docs commit, L4 |
 | T3 | S2 | user OK | pending | labels created, ruleset requires `issue` |
 
 T1: `.github/scripts/check_issue_link.py` with tests in `dev/`, workflow `issue-link.yml`. T2: templates add `status:needs-review`, PR template `Closes #`, CONTRIBUTING flow. T3: create the labels, add `issue` to the required checks after merge.
@@ -29,3 +29,4 @@ High-risk: T1 (CI guard, `pull_request_target`, items 2 and 5). Independent veri
 - **L1 (2026-10-18, user, verbatim):** "Hacele, abrí el PR y esta vez lo reviso porque quiero ver bien cómo quedaron las plantillas. ¿Hay algo al respecto de que un issue necesite ser evaluado y que finalmente se le dé la etiqueta de aprobación o aprobado para desarrollar? O algo como que todo PR debe estar ligado a un issue? No se, yo me guío bastante del repo de gentle-ai"
 - **L2 (2026-10-18, user, verbatim):** "Me gusta, porque hacemos de este un mejor producto, aunque también me aplique a mi"
 - **L3 (research):** gentle-ai uses labels `status:needs-review`, `status:approved` ("Approved for implementation — PRs can now be opened"), `status:needs-info`, `status:needs-design`, and `pr-check.yml` jobs "Check Issue Reference" (Closes/Fixes/Resolves/Refs #N, HTML comments ignored, fails closed on errors) and "Check Issue Has status:approved".
+- **L4 (evidence):** RED: `dev/test_check_issue_link.py` failed to collect (script missing). GREEN: 30 passed; full suite 639 passed, 26 skipped; ruff, format and pyright clean; actionlint ok; zizmor no findings (dangerous-triggers ignored with reason). Probe against the GitHub API: `Closes #53` -> "#53 is a pull request, not an issue" (rc 1), `Refs #99999` -> "#99999 does not exist" (rc 1), no reference -> "This pull request links no issue." (rc 1). T2: issue forms add `status:needs-review`; PR template starts with `Closes #`; CONTRIBUTING "Issues first"; README ruleset paragraph names the `issue` check and the exempt list.

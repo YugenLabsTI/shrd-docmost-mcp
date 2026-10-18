@@ -5,8 +5,8 @@ go through [private vulnerability reporting](SECURITY.md), never a public issue.
 
 ## Quick path
 
-1. Open an issue first for anything bigger than a small fix, so we agree on the approach
-   before you write it.
+1. Open an issue and wait until a maintainer labels it `status:approved` (see
+   [Issues first](#issues-first)). Every pull request needs one, maintainers' included.
 2. Set up and check:
 
    ```bash
@@ -17,8 +17,27 @@ go through [private vulnerability reporting](SECURITY.md), never a public issue.
    uv run pyright           # strict on src
    ```
 
-3. Open a pull request against `main`. CI must pass (lint, tests on Python 3.11 to 3.14,
-   dependency audit, wheel check) before it can be merged.
+3. Open a pull request against `main` whose description links the issue (`Closes #12`).
+   CI must pass (lint, tests on Python 3.11 to 3.14, dependency audit, wheel check, and
+   the `issue` check) before it can be merged.
+
+## Issues first
+
+Every change starts as an issue, so we agree on what to build before anyone writes it.
+
+| Label | Meaning |
+|-------|---------|
+| `status:needs-review` | New; a maintainer has not looked at it yet (the issue forms add it) |
+| `status:needs-info` | Waiting for the reporter to answer a question |
+| `status:needs-design` | Valid, but needs a design decision before a pull request |
+| `status:approved` | Accepted: a pull request can be opened |
+
+A pull request links the issue it implements in its description, with `Closes #12`
+(also `Fixes` or `Resolves`; the issue closes on merge) or `Refs #12` (it stays open).
+References inside HTML comments do not count. The required `issue` check fails until
+every linked issue is labelled `status:approved`; when the label arrives after the pull
+request, re-run the check or edit the description. Release pull requests and Dependabot
+updates are exempt.
 
 ## Keep your instance's data out of the repository
 

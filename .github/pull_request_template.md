@@ -1,8 +1,12 @@
 <!-- The title is a Conventional Commit (fix:, feat:, docs:, ci: ...): it decides the next version. See CONTRIBUTING.md. -->
 
+Closes #
+
+<!-- The issue must be labelled status:approved; use "Refs #" to link it without closing it. -->
+
 ## What and why
 
-<!-- One paragraph: what changes, who it helps, and why. Link the issue it closes. -->
+<!-- One paragraph: what changes, who it helps, and why. -->
 
 ## What to review first
 
