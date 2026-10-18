@@ -418,8 +418,10 @@ with the workflow's `GITHUB_TOKEN` run CI only after someone approves the run). 
 belongs to the organization, is installed on this repository only, and has read and
 write access to contents, pull requests and issues. Its client ID is the variable
 `RELEASE_APP_CLIENT_ID` and its private key the secret `RELEASE_APP_PRIVATE_KEY`, both in
-the repository environment `release`, limited to `main`. Without them the release job
-fails, and nothing is released. Wait for the release pull request's CI to pass before
+the repository environment `release`, limited to `main`. Limit the environment to `main`
+before storing the key: GitHub creates a missing environment on first use with no branch
+limit. Without the variable and the secret the release job fails, and nothing is
+released. Wait for the release pull request's CI to pass before
 merging. A ruleset on `main` requires a pull request whose lint, test, audit and build
 checks pass, and forbids force pushes and deleting the branch.
 

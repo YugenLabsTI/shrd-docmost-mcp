@@ -184,8 +184,8 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
   publish:
-    # Tags created with GITHUB_TOKEN start no workflows, so start the publication here
-    # (workflow_dispatch is the exception). It runs on main and builds the new tags.
+    # Publish runs only on workflow_dispatch, so start it here with the new tags. It runs
+    # on main and builds the tags.
     needs: release
     if: needs.release.outputs.tags != ''
     runs-on: ubuntu-latest
