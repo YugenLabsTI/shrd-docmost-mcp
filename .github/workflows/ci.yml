@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release job starts CI on the release PR this way: pull requests opened with
+  # GITHUB_TOKEN do not trigger workflows, workflow_dispatch is the exception.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -90,3 +93,46 @@ jobs:
           echo "expected: $expected / actual: $actual"
           test "$actual" = "$expected"
           wheel-env/bin/python -I -c "import docmost_client, yugen_docmost_mcp"
+
+  release:
+    # Opens or updates the release PR, and tags and releases the packages a merged release
+    # PR bumped. It runs only on a push to main whose every check passed, so a failure in
+    # either package stops the release of both.
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && github.repository_owner == 'YugenLabsTI'
+    needs: [lint, test, audit, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - name: Check that this commit is still the head of main
+        # release-please works on the head of main, not on this commit: if main moved,
+        # the run for the newer commit releases it once its own checks pass.
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved to $head; skipping the release for $GITHUB_SHA."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        if: steps.head.outputs.current == 'true'
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Run CI on the release PR
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
