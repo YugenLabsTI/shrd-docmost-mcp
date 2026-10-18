@@ -1,0 +1,75 @@
+# Changelog
+
+## 0.1.0 (2026-10-18)
+
+
+### Features
+
+* add comment and replace-confirmation settings ([eaf8e5f](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/eaf8e5f4a20a50f75596ed2ad6092507e411a9c7))
+* add comment settings and recent pages ([84621c6](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/84621c632ec1f21d06a20581affb6debbdba7a5e))
+* **client:** add authenticated sync and async sessions ([d9471e3](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/d9471e3919dd602c054956f44e5f75b75db64b78))
+* **client:** add authenticated sync and async sessions ([ad8d932](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ad8d93275c61395c00ab51a4265bfba768fc6158))
+* **client:** add guarded page writes ([a7d8914](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/a7d89142850542cd38f7aee0c53a9a5e1c59af01))
+* **client:** add guarded page writes ([4eb2096](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/4eb20964522d3647837a4052541fb8767bc77093))
+* **client:** add typed read operations ([43c278b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/43c278b9f4644ff5006172a52c00e7452e766523))
+* **client:** add typed read operations ([a5d6b5e](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/a5d6b5e4927ddb9a45bfc13d3d7fa34d6d89fdb5))
+* **client:** edit one section of a page ([36fa5ed](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/36fa5ed51dda02718be22f29e43db5403e8052b9))
+* **client:** edit one section of a page ([0ca8a53](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/0ca8a532af8f9553fe95aa580057913c2003ed61))
+* **client:** enforce the space allowlist on every read ([6c1ae30](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/6c1ae3094898a59df172333da808871fdd0f0df7))
+* **client:** enforce the space allowlist on every read ([e3c02f3](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/e3c02f3403f4d151e06810e0eec304f96627213f))
+* **client:** keep mentions already on a page when editing it ([52f2591](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/52f2591039615099ec8612c571668f83bee583f2))
+* **client:** keep mentions already on a page when editing it ([d608c90](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/d608c90c6e15db526fd0ee297550b917f44791fd))
+* **client:** list a page outline ([13872a1](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/13872a102f89af18d5c2fd20d3fbd4ad4307f767))
+* **client:** list a page outline ([927c01f](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/927c01f9ced7234867dcede1e59f3407a2404799))
+* **client:** list recent pages ([2cdacd0](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/2cdacd046211adf57d69aea8b5deb1b9ca25883b))
+* **client:** load secure settings from environment ([ac3a6be](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ac3a6bef3dda421d4a2480807f394d7f17cae948))
+* **client:** load secure settings from environment ([ed7d639](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ed7d639fcae21d2327a3526932af6ea8ab4673d7))
+* **client:** move pages within their space behind DOCMOST_ALLOW_MOVE ([cfc1d0b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/cfc1d0b7f21f05754861dad10d36e2b8b6bc4d28))
+* **client:** move pages within their space behind DOCMOST_ALLOW_MOVE ([98541c8](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/98541c81053590a375c6a33497774a56dc1ff812))
+* **client:** read and add page comments ([3a8412e](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/3a8412e3faecb6c00a4851fabe3e581c65230082))
+* **client:** read and add page comments ([49b5980](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/49b59800ae5b02b6000ef107e5142f1aa3e710da))
+* **client:** splice one section of a page HTML ([a9edf30](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/a9edf30942c95304c7d9e04bb00cf35af9069dd4))
+* **client:** splice one section of a page HTML ([e280149](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/e280149a2d2dff8bdb6b235b371a9e28838ff70f))
+* configurable busy window and fail-closed clock skew ([8b5f25a](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/8b5f25ac65d8165c80c2b7519c150fbc75185738))
+* Docmost MCP server and client MVP (tracker) ([57de93f](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/57de93f18c40cd28e43676459f106f772d527d34))
+* make the busy window configurable and bound the clock skew ([edb3363](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/edb3363c9f2ae5fd8e7ddad36754fc57e0f25508))
+* MCP block 1 — comments, recent pages, replace confirmation (tracker) ([7ef09cd](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/7ef09cd9d5d1f13f647d1d647fa2af383b18d3df))
+* **mcp:** add move_page behind DOCMOST_ALLOW_MOVE ([04cc495](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/04cc4953236c7fb5e057f3802cb66a84dc1b31f8))
+* **mcp:** add move_page behind DOCMOST_ALLOW_MOVE ([ac1239f](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ac1239f3bb8ae8c401e1ff94859257c717bd74ae))
+* **mcp:** add outline and section edit tools ([88a257a](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/88a257ae712b096e8802f5455143779f056db4a2))
+* **mcp:** add outline and section edit tools ([a1b672c](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/a1b672cc23a995c9f7bfabb71994a2178aea3db1))
+* move_page behind DOCMOST_ALLOW_MOVE (tracker) ([9e13166](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/9e131669b590ac1660c0f940003619962ebf0b82))
+* section editing follow-ups (tracker) ([6f19297](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/6f19297e4daf73cd0109322320b6a1cb50780205))
+* section-level page editing (tracker) ([02371dc](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/02371dcabb26a16320f5614a069fcfcc1d3b7540))
+
+
+### Bug Fixes
+
+* accept explicit nulls and harden local test tooling ([2d241b5](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/2d241b52601959339b17f3765456f5b9da073f7a))
+* ask for replace confirmation only when content is sent ([02fb82d](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/02fb82d2c6762c6b7d3e01611e427d7df3504ef9))
+* block 1 review follow-ups ([03fd789](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/03fd7899652548e396f7896506e7298af9f817e0))
+* clean up review follow-ups for the tree resource, prompts and busy window ([fe6c414](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/fe6c414c80d5eab8d5e440d5f88de4553e6bab30))
+* **client:** close content guard gaps found in verification ([a50a761](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/a50a7611c6a32385f31d5ff079fbb9373b38bd66))
+* **client:** close mention guard bypasses and keep the busy window fail-safe ([aca7647](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/aca7647617663bd837e017bbb848d19aba3bd314))
+* **client:** harden the mention guard and busy window; tests and docs ([109c12a](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/109c12aa476ba56a5aad7534a9b6e28fcb6523f1))
+* **client:** ignore id-less mentions when listing who a page mentions ([2c0b304](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/2c0b304022cfc82dbad7c4aa0ceb9eaab6eeb827))
+* **client:** let page positions cross integer heads like Docmost ([0d3963e](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/0d3963ec43bb3dd1e321eea6f334b80c11d1b76f))
+* **client:** let page positions cross integer heads like Docmost ([95ad8d3](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/95ad8d3f46ad71361535f17fc40f69197bb97f6a))
+* **client:** measure the busy window on Docmost's clock ([289339f](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/289339ff3488a408fafdb31b85b3ae929eafbf8e))
+* **client:** refuse duplicate heading ids and raw-text elements in section edits ([6e7c600](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/6e7c600d7555c28d8710e7fe69c9fbf1ed4b24c9))
+* **client:** refuse section content that Docmost would let swallow the page ([325963a](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/325963aed2058a3c4d284a07e4e73f3120f5c586))
+* **client:** scope recent pages and lighten comment prechecks ([e39b4ce](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/e39b4ce5134a890e8bb21d492dc98379b0db0ef4))
+* **client:** splicer rules and busy window on Docmost's clock ([e9b8c02](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/e9b8c029ed898f4514c44ae651154a04d4706699))
+* **client:** treat empty secrets as unset and refuse calls after close ([0f0a6c1](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/0f0a6c1f0af6a6b396b9e8d55b8b4a9a251bb8fe))
+* keep search paging and identifier arguments faithful ([fe65f45](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/fe65f45c60d109b9305a6f121a2801e5e7e192de))
+* **mcp:** fail closed on blank confirmations and quote page ids ([dc5dd36](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/dc5dd367789514320051bf9f3348992789a5c4fa))
+* refuse section edits when Docmost's and the local clock disagree ([1713a32](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/1713a3208b2eef8467d31ebc222ca70d635a3f39))
+* review follow-ups for the tree resource, prompts and busy window ([45fcebb](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/45fcebb4c841cbfed1f5b6c782f28a911896b893))
+
+
+### Documentation
+
+* add README, security model, and changelog ([ca6fcef](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ca6fcefffb04f5102696df51b8b454538e7e70f7))
+* add README, security model, and changelog ([9c2c704](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/9c2c70431251687e88e189b783a98644ec26d638))
+* document section editing ([8d47b23](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/8d47b233e7cbc2820f7bd05359784f932dd994d5))
+* note that reader comments need Docmost Enterprise ([75fcbc4](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/75fcbc42062595305b3301108b5b7de01d607c15))
