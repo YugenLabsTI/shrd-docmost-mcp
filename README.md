@@ -43,8 +43,10 @@ internal API the Docmost web app uses, with read-only access by default.
 
    The packages are not on PyPI yet: `uvx` installs the server from a release tag of this
    repository (see [Releases and versioning](#releases-and-versioning)), and builds
-   `docmost-client` from the same commit. It needs read access to the repository over SSH
-   (or HTTPS after `gh auth setup-git`). To run your own checkout instead:
+   `docmost-client` from the same commit. It needs read access to the repository over SSH;
+   over HTTPS, run `gh auth setup-git` once and use
+   `git+https://github.com/YugenLabsTI/shrd-docmost-mcp@<tag>#subdirectory=packages/yugen-docmost-mcp`.
+   To run your own checkout instead:
    `"command": "uv", "args": ["run", "--directory", "/path/to/shrd-docmost-mcp", "yugen-docmost-mcp"]`.
 3. Ask the agent to search the wiki. Writes stay disabled until you set
    `DOCMOST_READ_ONLY=0`.
@@ -366,9 +368,20 @@ Both packages are versioned and released independently, from CI, with
 3. To upgrade, change the tag in the MCP host configuration (see the Quick path).
 
 A failing check in either package stops the release of both: the release job runs only
-after lint, the tests, the dependency audit and the wheel check pass on that commit. A
-test also fails when `yugen-docmost-mcp`'s `docmost-client` range no longer includes the
+after lint, the tests, the dependency audit and the wheel check pass on that commit, and
+it refuses to tag a merged release pull request whose own CI run did not pass. A test
+also fails when `yugen-docmost-mcp`'s `docmost-client` range no longer includes the
 client's version, because uv does not check ranges between workspace members.
+
+Merge the release pull request only after its CI passes. If its merge commit fails CI
+anyway, every later release job fails until that is resolved:
+
+- a flaky failure: re-run the failed CI run of the merge commit, then re-run the failed
+  release job;
+- a real defect: do not tag that commit. Fix `main`, tag the fixed commit by hand with
+  the release's tag (`git tag docmost-client-vX.Y.Z <sha>`, push it and create its GitHub
+  release), and change the release pull request's label from `autorelease: pending` to
+  `autorelease: tagged`.
 
 | Commit | Before 1.0 | From 1.0 |
 |--------|------------|----------|
@@ -376,9 +389,11 @@ client's version, because uv does not check ranges between workspace members.
 | `feat:` | patch | minor |
 | `feat!:` or a `BREAKING CHANGE:` footer | minor | major |
 
-A commit counts for a package only when it changes files in that package's directory.
-`perf:`, `revert:` and `docs:` count as patches; `chore:`, `ci:`, `test:`, `refactor:`,
-`build:` and `style:` never start a release.
+A commit counts for a package only when it changes files in that package's directory (an
+empty commit counts for both). `perf:`, `revert:`, `deps:` and `docs:` count as patches;
+`chore:`, `ci:`, `test:`, `refactor:`, `build:` and `style:` never start a release. When
+the server needs a wider `docmost-client` range, change it in a `fix:` or `deps:` commit,
+so the server is released with the new range.
 
 **Why 0.x.** Under [Semantic Versioning](https://semver.org/), 0.x is initial
 development and the public API may still change. Both packages depend on Docmost's
@@ -391,8 +406,9 @@ internal API, so 1.0 waits until:
 - at least two Docmost versions are in the [compatibility](#compatibility) matrix;
 - the integration tests run in CI, and a deprecation policy is written down.
 
-A commit with a `Release-As: 1.0.0` footer starts 1.0; the MCP's `docmost-client` range
-then becomes `>=1.0,<2`.
+A commit with a `Release-As: 1.0.0` footer starts 1.0 for the packages it changes (an
+empty commit starts it for both); the MCP's `docmost-client` range then becomes
+`>=1.0,<2`.
 
 **Maintainers.** The release job uses the workflow's `GITHUB_TOKEN`, so the repository
 must allow GitHub Actions to create pull requests (Settings → Actions → General →
