@@ -1,0 +1,87 @@
+name: Bug report
+description: Something does not work as the documentation says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security issues go through [private vulnerability reporting](https://github.com/YugenLabsTI/shrd-docmost-mcp/security/advisories/new), never here.
+
+        **This issue is public.** Leave out your Docmost URL, emails, passwords, tokens, space names, page IDs and page content. Replace them with placeholders such as `https://wiki.example.com` or `<page-id>`.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - yugen-docmost-mcp (MCP server)
+        - docmost-client (Python client)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: "`yugen-docmost-mcp --version`, or `pip show docmost-client`."
+      placeholder: "0.1.1"
+    validations:
+      required: true
+  - type: input
+    id: docmost-version
+    attributes:
+      label: Docmost version
+      description: The version your Docmost instance runs (ask its administrator if unsure).
+      placeholder: "0.96.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: MCP host, Python version and operating system
+      placeholder: "Claude Desktop 1.2, Python 3.12, macOS 15"
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings
+      description: The `DOCMOST_*` settings you changed from their defaults, with their values. Never include `DOCMOST_PASSWORD` or the base URL.
+      placeholder: |
+        DOCMOST_READ_ONLY=0
+        DOCMOST_ALLOWED_SPACES=<two slugs>
+      render: shell
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The tool or method you called, its arguments (with placeholders) and the result or error code.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Configure ...
+        2. Ask the agent to ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The server's log lines around the failure, with URLs, emails and IDs replaced.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed every URL, credential, name, ID and page content of my instance from this issue.
+          required: true
