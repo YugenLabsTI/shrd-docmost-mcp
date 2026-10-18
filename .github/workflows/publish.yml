@@ -16,8 +16,10 @@ on:
 
 permissions: {}
 
+# One run per set of tags: a run waiting for approval never cancels the publication of
+# another release, and a second run for the same tags waits for the first.
 concurrency:
-  group: publish
+  group: publish-${{ inputs.tags }}
   cancel-in-progress: false
 
 jobs:
