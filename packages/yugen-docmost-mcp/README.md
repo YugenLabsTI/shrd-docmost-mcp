@@ -12,8 +12,9 @@ DOCMOST_PASSWORD_FILE=/run/secrets/docmost_password \
 yugen-docmost-mcp
 ```
 
-Tools: `search`, `list_spaces`, `list_children`, `get_page`, and, only when
-`DOCMOST_READ_ONLY=0`, `create_page` and `update_page`.
+Read tools: `search`, `list_spaces`, `list_children`, `get_page`, `get_page_outline`,
+`list_recent_pages` and `list_comments`. Only when enabled: `add_comment`, `create_page`,
+`update_page`, `edit_section` and `move_page`.
 
-See the [project README](../../README.md) for configuration, the tool reference, the
+See the [project README](https://github.com/YugenLabsTI/shrd-docmost-mcp#readme) for configuration, the tool reference, the
 security model, and the compatibility matrix.
