@@ -1,0 +1,33 @@
+# Feature: release pipeline for internal distribution
+
+Objective: version and release both packages from CI with release-please (independent versions, per-package changelogs, tags) and distribute them inside the team from git tags; PyPI publishing comes later, when the repository is public.
+Branch: `feat/release-pipeline` (from `main` 48d75c2). Delivery: ask-on-risk; single PR expected (under ~400 lines). Test runner: `uv run pytest`; workflows checked with actionlint, release-please config with its JSON schema.
+
+## Specs
+
+- **S1 — Pipelines.** "Me gusta!! entonces vamos a ello y que se pueda manejar desde pipelines me gusta mas!!" Agreed design: release-please (manifest mode), static versions, independent versions per package ("Independientes"), per-package CHANGELOGs, one tag per package.
+- **S2 — Client changes validate the MCP; failures stop releases.** "entonces cada que cambie el cliente también se debería disparar un flujo de validación del MCP ¿no? En caso de que falle algo del MCP frenamos publicaciones o cómo sería?" Agreed answer: the full suite gates every release; any failure blocks the whole release; CI checks that the MCP's `docmost-client` range includes the client's version (uv does not enforce it for workspace members).
+- **S3 — Internal distribution.** "¿Y si por ahora solo lo fueramos a usar internamente? ¿Como lo podria distribuir en mi equipo? (todos tendrian acceso al repo privado como tal)" → "Dale, arrancá con ese alcance": release-please, tags and installation from git tags with `uvx`; PyPI, Trusted Publishing and manual approval are out of scope for now.
+- **S4 — Versioning policy.** "¿Por qué empezamos en 0.1.0 y no en 1.0.0? ¿Cuándo sería el salto a v1.0.0?" Proposed criteria, documented in the README for the user to adjust in review.
+- **S5 — Inherited constraints.** No AI attribution, no instance data in the repo, minimal dependencies, pinned actions, least-privilege workflow permissions, docs updated with behavior.
+
+Assumptions (agent decisions): first release is 0.1.0 for both packages (manifest `0.0.0`); before 1.0 a breaking change bumps the minor and a feature bumps the patch (`bump-minor-pre-major`, `bump-patch-for-minor-pre-major`), so the MCP's `<0.2` range survives feature releases; one combined release PR; tags `docmost-client-vX.Y.Z` and `yugen-docmost-mcp-vX.Y.Z`; release-please keeps `uv.lock` in sync through `extra-files`; the release job runs in CI after every check passes on a push to `main` and only when that commit is still the head of `main`; after updating the release PR it dispatches CI on the release branch (events from `GITHUB_TOKEN` do not start workflows, `workflow_dispatch` is the exception); the root `CHANGELOG.md` keeps the notes from before the first release; the lowest-client CI job is deferred to the PyPI phase (internally the MCP tag pins the client to the same commit).
+
+## Tasks
+
+| ID | Specs | Route | Status | Evidence |
+|----|-------|-------|--------|----------|
+| T1 | S1, S2, S5 | inline | done | 2e15f52, L4 |
+| T2 | S1, S2, S5 | inline | done | 1de456d, L4 |
+| T3 | S3, S4, S5 | inline | done | docs commit, L4 |
+
+T1 release-please config + manifest and a test that keeps them consistent with the workspace (components, paths, uv.lock entries) plus the MCP→client range check. T2 CI: release job (gated, head check, dispatch CI on the release PR branch), `workflow_dispatch` trigger. T3 docs: README install from git tags, releases and versioning policy, root CHANGELOG note, SECURITY row.
+
+High-risk: T2 (release/CI, item 5). Independent verifier at the feature's end.
+
+## Log
+
+- **L1 (2026-10-17, user, verbatim):** "Me gusta!! entonces vamos a ello y que se pueda manejar desde pipelines me gusta mas!! Tengo otras preguntas antes de continuar"
+- **L2 (2026-10-17, user, verbatim):** "Dale, arrancá con ese alcance" (after the internal distribution proposal: release-please, tags, `uvx` from git tags, PyPI later).
+- **L3 (research):** release-please v17 python strategy updates `[project].version` and the package `CHANGELOG.md`; `uv.lock` needs `extra-files` with jsonpath `$.package[?(@.name.value=='<name>')].version` and path `/uv.lock` (tested: `uv lock --check` passes); components must be explicit; manifest `0.0.0` gives a first release of 0.1.0; GitHub Free private repos have no environments; `uv` does not enforce ranges on workspace members; installing the MCP from a git subdirectory builds the client from the same commit (tested with `uvx --from git+file://...#subdirectory=packages/yugen-docmost-mcp`).
+- **L4 (evidence):** T1 RED: 3 config tests failed without `release-please-config.json`; GREEN after config + manifest (4 passed); the range check fails with "yugen-docmost-mcp requires docmost-client>=0.1.0,<0.2, but the workspace has docmost-client 0.2.0: update the range." when the client is bumped to 0.2.0; config validated against the release-please v17.11.2 JSON schema. T2: `actionlint` ok, `zizmor --offline` no findings; action outputs (`prs_created`, `pr.headBranchName`) checked in release-please-action v5.0.0 source. The repository currently has `can_approve_pull_request_reviews: false`: a maintainer must allow GitHub Actions to create pull requests before the first run. Full suite 609 passed, 26 skipped; pyright clean.
