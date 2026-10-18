@@ -1342,6 +1342,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "packaging" },
     { name = "pip-audit" },
     { name = "pyright" },
     { name = "pytest" },
@@ -1357,6 +1358,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "packaging", specifier = ">=26.3" },
     { name = "pip-audit", specifier = ">=2.10.1" },
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=9.1.1" },

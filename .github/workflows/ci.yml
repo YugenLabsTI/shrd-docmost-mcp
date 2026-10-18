@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release job starts CI on the release PR this way: pull requests opened with
+  # GITHUB_TOKEN do not trigger workflows, workflow_dispatch is the exception.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -90,3 +93,83 @@ jobs:
           echo "expected: $expected / actual: $actual"
           test "$actual" = "$expected"
           wheel-env/bin/python -I -c "import docmost_client, yugen_docmost_mcp"
+
+  release:
+    # Opens or updates the release PR, and tags and releases the packages a merged release
+    # PR bumped. It runs only on a push to main whose every check passed, so a failure in
+    # either package stops the release of both.
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && github.repository_owner == 'YugenLabsTI'
+    needs: [lint, test, audit, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - name: Check that this commit is still the head of main
+        # release-please works on the head of main, not on this commit: if main moved,
+        # the run for the newer commit releases it once its own checks pass.
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved to $head; skipping the release for $GITHUB_SHA."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Refuse to tag a release PR whose merge commit did not pass CI
+        # release-please tags every merged release PR still labelled "autorelease: pending"
+        # at its merge commit, also on a later run. Nothing stops a release PR from being
+        # merged before its checks pass, so check the CI run of that commit first.
+        if: steps.head.outputs.current == 'true'
+        # An explicit bash adds pipefail, so a failing "gh pr list" fails the step instead
+        # of reading as "no pending release PRs".
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr list --repo "$GITHUB_REPOSITORY" --state merged --label "autorelease: pending" \
+            --json number,mergeCommit --jq '.[] | "\(.number) \(.mergeCommit.oid)"' |
+          while read -r number sha; do
+            if [ "$sha" = "$GITHUB_SHA" ]; then
+              continue
+            fi
+            conclusion=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&event=push" \
+              --jq '.workflow_runs[0].conclusion')
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::Release PR #$number was merged as $sha, whose CI run is '$conclusion'; see Releases and versioning in the README."
+              exit 1
+            fi
+          done
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        if: steps.head.outputs.current == 'true'
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  release-pr-ci:
+    # Pull requests opened with GITHUB_TOKEN do not trigger workflows, so start CI on the
+    # release PR's branch here (workflow_dispatch is the exception).
+    needs: release
+    if: needs.release.outputs.prs_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Run CI on the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(needs.release.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"

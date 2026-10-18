@@ -1,10 +1,21 @@
 # Changelog
 
-All notable changes to this project are documented here. Both packages follow
-[Semantic Versioning](https://semver.org/); the public API of `docmost-client` is what
-`docmost_client.__all__` exports.
+Both packages follow [Semantic Versioning](https://semver.org/); the public API of
+`docmost-client` is what `docmost_client.__all__` exports.
 
-## Unreleased
+From the first release on, each package has its own changelog, generated from the commit
+messages: [docmost-client](packages/docmost-client/CHANGELOG.md) and
+[yugen-docmost-mcp](packages/yugen-docmost-mcp/CHANGELOG.md). This file keeps the notes
+written before it.
+
+## Before the first release
+
+### Release pipeline
+
+- Both packages are released from CI with release-please: independent versions, one tag
+  per package (`docmost-client-vX.Y.Z`, `yugen-docmost-mcp-vX.Y.Z`) and a changelog per
+  package. Installing the server from a release tag with `uvx` is documented in the
+  README.
 
 ### License
 
