@@ -17,6 +17,7 @@ yugen-docmost-mcp = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "packaging>=26.3",
     "pip-audit>=2.10.1",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
