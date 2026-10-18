@@ -2,7 +2,7 @@ name: Publish
 
 # Publishes release tags to TestPyPI, installs them from there, and only then publishes
 # them to PyPI, after a maintainer approves the pypi environment. The release job in
-# ci.yml starts it after tagging (tags created with GITHUB_TOKEN start no workflows). A
+# ci.yml starts it after tagging, with the new tags as input (a tag push starts nothing). A
 # maintainer can also start it on main by hand: to publish a package for the first time,
 # or to retry a failed run.
 

@@ -412,12 +412,18 @@ A commit with a `Release-As: 1.0.0` footer starts 1.0 for the packages it change
 empty commit starts it for both); the MCP's `docmost-client` range then becomes
 `>=1.0,<2`.
 
-**Maintainers.** The release job uses the workflow's `GITHUB_TOKEN`, so the repository
-must allow GitHub Actions to create pull requests (Settings → Actions → General →
-Workflow permissions). Pull requests opened with that token do not trigger workflows, so
-the job starts CI on the release pull request's branch itself; wait for it to pass
-before merging. A ruleset on `main` requires a pull request whose lint, test, audit and
-build checks pass, and forbids force pushes and deleting the branch.
+**Maintainers.** release-please opens the release pull request and creates the tags with
+a GitHub App's token, so the pull request runs CI like any other (pull requests opened
+with the workflow's `GITHUB_TOKEN` run CI only after someone approves the run). The App
+belongs to the organization, is installed on this repository only, and has read and
+write access to contents, pull requests and issues. Its client ID is the variable
+`RELEASE_APP_CLIENT_ID` and its private key the secret `RELEASE_APP_PRIVATE_KEY`, both in
+the repository environment `release`, limited to `main`. Limit the environment to `main`
+before storing the key: GitHub creates a missing environment on first use with no branch
+limit. Without the variable and the secret the release job fails, and nothing is
+released. Wait for the release pull request's CI to pass before
+merging. A ruleset on `main` requires a pull request whose lint, test, audit and build
+checks pass, and forbids force pushes and deleting the branch.
 
 Publishing needs, on both PyPI and TestPyPI, a trusted publisher for each project
 (owner `YugenLabsTI`, repository `shrd-docmost-mcp`, workflow `publish.yml`, environment
