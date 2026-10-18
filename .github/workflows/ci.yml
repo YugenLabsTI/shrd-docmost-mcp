@@ -111,6 +111,7 @@ jobs:
     outputs:
       prs_created: ${{ steps.release.outputs.prs_created }}
       pr: ${{ steps.release.outputs.pr }}
+      tags: ${{ steps.tags.outputs.tags }}
     steps:
       - name: Check that this commit is still the head of main
         # release-please works on the head of main, not on this commit: if main moved,
@@ -157,6 +158,32 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: List the tags this run released
+        id: tags
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: |
+          tags=$(jq -r '. as $o | [($o.paths_released | fromjson)[] | $o["\(.)--tag_name"]]
+            | join(" ")' <<< "$OUTPUTS")
+          echo "Released: $tags"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+  publish:
+    # Tags created with GITHUB_TOKEN start no workflows, so start the publication here
+    # (workflow_dispatch is the exception). It runs on main and builds the new tags.
+    needs: release
+    if: needs.release.outputs.tags != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Publish the released tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ needs.release.outputs.tags }}
+        run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref main -f tags="$TAGS"
 
   release-pr-ci:
     # Pull requests opened with GITHUB_TOKEN do not trigger workflows, so start CI on the
