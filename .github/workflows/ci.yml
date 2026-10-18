@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The release job starts CI on the release PR this way: pull requests opened with
-  # GITHUB_TOKEN do not trigger workflows, workflow_dispatch is the exception.
   workflow_dispatch:
 
 permissions:
@@ -104,13 +102,15 @@ jobs:
     needs: [lint, test, audit, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Holds the release App's credentials; deployable from main only.
+    environment:
+      name: release
+    # GITHUB_TOKEN only reads here; release-please writes with the App's token.
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      actions: read
+      contents: read
+      pull-requests: read
     outputs:
-      prs_created: ${{ steps.release.outputs.prs_created }}
-      pr: ${{ steps.release.outputs.pr }}
       tags: ${{ steps.tags.outputs.tags }}
     steps:
       - name: Check that this commit is still the head of main
@@ -152,10 +152,24 @@ jobs:
               exit 1
             fi
           done
+      - name: Get a token for the release App
+        # Pull requests opened with GITHUB_TOKEN run their workflows only after someone
+        # approves them; the App's pull requests run CI like anyone else's. There is no
+        # fallback to GITHUB_TOKEN: without the App the release fails instead.
+        id: app
+        if: steps.head.outputs.current == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         if: steps.head.outputs.current == 'true'
         with:
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
       - name: List the tags this run released
@@ -184,19 +198,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAGS: ${{ needs.release.outputs.tags }}
         run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref main -f tags="$TAGS"
-
-  release-pr-ci:
-    # Pull requests opened with GITHUB_TOKEN do not trigger workflows, so start CI on the
-    # release PR's branch here (workflow_dispatch is the exception).
-    needs: release
-    if: needs.release.outputs.prs_created == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Run CI on the release PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(needs.release.outputs.pr).headBranchName }}
-        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
