@@ -37,7 +37,8 @@ internal API the Docmost web app uses, with read-only access by default.
    }
    ```
 
-   `uvx` installs the server from PyPI, pinned to one version; to upgrade, change the
+   `uvx` installs the server from PyPI, pinned to one version (use the latest one on
+   [PyPI](https://pypi.org/project/yugen-docmost-mcp/)); to upgrade, change the
    version (see [Releases and versioning](#releases-and-versioning)). The client alone is
    `pip install docmost-client`. To run your own checkout instead:
    `"command": "uv", "args": ["run", "--directory", "/path/to/shrd-docmost-mcp", "yugen-docmost-mcp"]`.
@@ -381,7 +382,8 @@ anyway, every later release job fails until that is resolved:
 - a real defect: do not tag that commit. Fix `main`, tag the fixed commit by hand with
   the release's tag (`git tag docmost-client-vX.Y.Z <sha>`, push it and create its GitHub
   release), and change the release pull request's label from `autorelease: pending` to
-  `autorelease: tagged`.
+  `autorelease: tagged`. Tags pushed by hand start no workflow: start Publish with the
+  new tags (see below).
 
 | Commit | Before 1.0 | From 1.0 |
 |--------|------------|----------|
@@ -428,7 +430,12 @@ example `gh workflow run publish.yml --ref main -f tags="docmost-client-v0.1.0"`
 The first publication of a project goes through a "pending" trusted publisher, and PyPI
 accepts one pending publisher per configuration at a time. So the first time, publish
 `docmost-client` on its own; once it is on both indexes, register the
-`yugen-docmost-mcp` publishers and publish the server.
+`yugen-docmost-mcp` publishers and publish the server. Until then, do not merge a release
+pull request that releases the server: its automatic publication would fail for the
+server (re-run it once the publishers exist; files already uploaded are skipped).
+
+Release tags are protected: a ruleset forbids moving or deleting `*-v*` tags, so a
+published version always matches its tag.
 
 ## License
 
