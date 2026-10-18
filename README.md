@@ -346,7 +346,8 @@ DOCMOST_INTEGRATION=1 uv run pytest -m integration
 ```
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/); they decide
-the next versions (see below).
+the next versions (see below). See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a
+pull request.
 
 ## Releases and versioning
 

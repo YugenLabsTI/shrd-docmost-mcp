@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a new tool, setting or behavior.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This issue is public.** Describe your use case without your Docmost URL, space names, page IDs or page content.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - yugen-docmost-mcp (MCP server)
+        - docmost-client (Python client)
+        - Both / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would like the server or client to do. Example tool calls or code help.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety
+      description: Writes are off by default and every write tool has its own switch. If this adds a write, how should it be enabled, and what could go wrong if an agent misuses it?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

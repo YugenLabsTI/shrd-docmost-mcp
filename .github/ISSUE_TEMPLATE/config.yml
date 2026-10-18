@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/YugenLabsTI/shrd-docmost-mcp/security/advisories/new
+    about: Report security issues privately, never in a public issue.
+  - name: Docmost itself
+    url: https://github.com/docmost/docmost/issues
+    about: Bugs in Docmost (not in this server or client) belong to the Docmost project.
