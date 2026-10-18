@@ -1,7 +1,7 @@
 """Fail a pull request that does not link an issue labelled ``status:approved``.
 
-Runs from the base branch (workflow ``issue-link.yml``), never from the pull request's
-code. Reads ``PR_BODY`` and ``PR_AUTHOR``; looks the issues up with ``GH_TOKEN`` in
+Runs from the default branch (workflow ``issue-link.yml``), never from the pull
+request's code. Reads ``PR_BODY`` and ``PR_AUTHOR``; looks the issues up with ``GH_TOKEN`` in
 ``GITHUB_REPOSITORY``. Standard library only, so the runner needs no install.
 """
 
@@ -22,12 +22,16 @@ EXEMPT_AUTHORS = frozenset({"yugen-release-docmost-mcp-bot[bot]", "dependabot[bo
 REFERENCE = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?):?\s+#(\d+)\b", re.IGNORECASE
 )
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# Text that does not count: HTML comments (also one left open), fenced code blocks and
+# inline code, where GitHub does not link issues either.
+IGNORED = re.compile(
+    r"<!--.*?(?:-->|\Z)|^ {0,3}(```|~~~).*?(?:^ {0,3}\1|\Z)|`[^`\n]*`", re.DOTALL | re.MULTILINE
+)
 HOW_TO_LINK = (
     "Link the issue this pull request implements in its description, with one of:\n"
     "  Closes #<number>   (closes the issue on merge; also Fixes or Resolves)\n"
     "  Refs #<number>     (links it without closing it)\n"
-    "References inside HTML comments do not count. A maintainer labels the issue "
+    "References inside HTML comments or code do not count. A maintainer labels the issue "
     f"{APPROVED} once it is accepted; then re-run this check."
 )
 
@@ -37,7 +41,7 @@ Fetch = Callable[[int], Issue | None]
 
 def linked_issues(body: str) -> list[int]:
     """Issue numbers the body references, in order, without repeats."""
-    numbers = (int(match) for match in REFERENCE.findall(HTML_COMMENT.sub("", body)))
+    numbers = (int(match) for match in REFERENCE.findall(IGNORED.sub("", body)))
     return list(dict.fromkeys(numbers))
 
 

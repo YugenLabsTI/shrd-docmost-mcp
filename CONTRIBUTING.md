@@ -34,7 +34,7 @@ Every change starts as an issue, so we agree on what to build before anyone writ
 
 A pull request links the issue it implements in its description, with `Closes #12`
 (also `Fixes` or `Resolves`; the issue closes on merge) or `Refs #12` (it stays open).
-References inside HTML comments do not count. The required `issue` check fails until
+References inside HTML comments or code do not count. The required `issue` check fails until
 every linked issue is labelled `status:approved`; when the label arrives after the pull
 request, re-run the check or edit the description. Release pull requests and Dependabot
 updates are exempt.

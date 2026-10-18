@@ -1,6 +1,11 @@
 """The issue-link check refuses pull requests that do not link an approved issue."""
 
 import importlib.util
+import io
+import json
+import urllib.error
+import urllib.request
+from email.message import Message
 from pathlib import Path
 from typing import Any
 
@@ -42,13 +47,15 @@ APPROVED = issue("status:approved", "bug")
         "Ref #7",
         "Fixes: #7",
         "Some context.\n\nCloses #7.",
+        "```\nCloses #8\n```\nCloses #7",
+        "`Closes #8` is the syntax.\nCloses #7",
     ],
 )
 def test_accepts_a_reference_to_an_approved_issue(body: str) -> None:
     ok, message = check_issue_link.check(body, "someone", fetcher({7: APPROVED}))
 
     assert ok
-    assert "#7" in message
+    assert message == "Linked approved issues: #7"
 
 
 @pytest.mark.parametrize(
@@ -58,6 +65,10 @@ def test_accepts_a_reference_to_an_approved_issue(body: str) -> None:
         "Related to #7",
         "See #7",
         "<!-- Closes #7 -->",
+        "<!-- Closes #7",
+        "```\nCloses #7\n```",
+        "~~~\nCloses #7",
+        "`Closes #7`",
         "Closes owner/repo#7",
         "Closes #",
         "Closes#7",
@@ -135,6 +146,61 @@ def test_maintainers_and_other_bots_are_not_exempt(author: str) -> None:
     ok, _ = check_issue_link.check("", author, fetcher({}))
 
     assert not ok
+
+
+class _Response(io.BytesIO):
+    def __enter__(self) -> "_Response":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+def _urlopen(outcome: object):
+    def urlopen(request: urllib.request.Request, timeout: float) -> _Response:
+        assert request.full_url == "https://api.github.com/repos/owner/repo/issues/7"
+        assert request.get_header("Authorization") == "Bearer token"
+        if isinstance(outcome, Exception):
+            raise outcome
+        return _Response(json.dumps(outcome).encode())
+
+    return urlopen
+
+
+@pytest.fixture
+def github(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GH_TOKEN", "token")
+    return monkeypatch
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("url", code, "error", Message(), None)
+
+
+def test_fetch_returns_the_issue(github: pytest.MonkeyPatch) -> None:
+    github.setattr(urllib.request, "urlopen", _urlopen(APPROVED))
+
+    assert check_issue_link.fetch_from_github(7) == APPROVED
+
+
+@pytest.mark.parametrize("code", [404, 410])
+def test_fetch_returns_none_for_a_missing_issue(github: pytest.MonkeyPatch, code: int) -> None:
+    github.setattr(urllib.request, "urlopen", _urlopen(_http_error(code)))
+
+    assert check_issue_link.fetch_from_github(7) is None
+
+
+@pytest.mark.parametrize(
+    "error", [_http_error(401), _http_error(500), urllib.error.URLError("unreachable")]
+)
+def test_fetch_fails_closed_on_any_other_error(
+    github: pytest.MonkeyPatch, error: Exception
+) -> None:
+    github.setattr(urllib.request, "urlopen", _urlopen(error))
+
+    with pytest.raises(urllib.error.URLError):
+        check_issue_link.fetch_from_github(7)
 
 
 def test_main_exits_non_zero_and_prints_why(

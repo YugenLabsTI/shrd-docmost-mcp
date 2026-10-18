@@ -17,7 +17,7 @@ Assumptions (agent decisions): the check runs on `pull_request_target` from the 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
 | T1 | S2, S3 | inline | done | bb83cef, L4 |
-| T2 | S1, S4 | inline | done | docs commit, L4 |
+| T2 | S1, S4 | inline | done | d25982a, L4 |
 | T3 | S2 | user OK | pending | labels created, ruleset requires `issue` |
 
 T1: `.github/scripts/check_issue_link.py` with tests in `dev/`, workflow `issue-link.yml`. T2: templates add `status:needs-review`, PR template `Closes #`, CONTRIBUTING flow. T3: create the labels, add `issue` to the required checks after merge.
@@ -30,3 +30,4 @@ High-risk: T1 (CI guard, `pull_request_target`, items 2 and 5). Independent veri
 - **L2 (2026-10-18, user, verbatim):** "Me gusta, porque hacemos de este un mejor producto, aunque también me aplique a mi"
 - **L3 (research):** gentle-ai uses labels `status:needs-review`, `status:approved` ("Approved for implementation — PRs can now be opened"), `status:needs-info`, `status:needs-design`, and `pr-check.yml` jobs "Check Issue Reference" (Closes/Fixes/Resolves/Refs #N, HTML comments ignored, fails closed on errors) and "Check Issue Has status:approved".
 - **L4 (evidence):** RED: `dev/test_check_issue_link.py` failed to collect (script missing). GREEN: 30 passed; full suite 639 passed, 26 skipped; ruff, format and pyright clean; actionlint ok; zizmor no findings (dangerous-triggers ignored with reason). Probe against the GitHub API: `Closes #53` -> "#53 is a pull request, not an issue" (rc 1), `Refs #99999` -> "#99999 does not exist" (rc 1), no reference -> "This pull request links no issue." (rc 1). T2: issue forms add `status:needs-review`; PR template starts with `Closes #`; CONTRIBUTING "Issues first"; README ruleset paragraph names the `issue` check and the exempt list.
+- **L5 (verification):** independent verifier: S1-S4 pass, no blockers. Confirmed on a live repository that a `pull_request_target` check run carries the PR head SHA and app 15368, so it can satisfy a required check; the token is read-only and the body only reaches the script as data; exemption by exact login; errors fail closed. Applied: A1 checkout uses the event's default ref (the default branch's latest commit, where the workflow file comes from since 2025-12-08) instead of `base.sha`; A3 references in fenced or inline code and after an unclosed `<!--` no longer count; A4 tests pin `fetch_from_github` (404/410 -> None; 401, 500, network errors raise). Pending (T3): create the four labels at merge (issue forms skip missing labels silently), then require `issue`. Accepted: A5, the runner image's python3 (3.12 on ubuntu-latest) must stay >= 3.10.
