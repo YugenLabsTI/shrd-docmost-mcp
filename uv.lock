@@ -440,7 +440,7 @@ wheels = [
 
 [[package]]
 name = "docmost-client"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/docmost-client" }
 dependencies = [
     { name = "anyio" },
@@ -1536,7 +1536,7 @@ wheels = [
 
 [[package]]
 name = "yugen-docmost-mcp"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/yugen-docmost-mcp" }
 dependencies = [
     { name = "docmost-client" },
