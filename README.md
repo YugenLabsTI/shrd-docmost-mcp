@@ -7,7 +7,7 @@ A security-first MCP server and Python client that let AI agents search, read, a
 server and public API require a Business/Enterprise license; this project talks to the
 internal API the Docmost web app uses, with read-only access by default.
 
-| Package | PyPI name | What it is |
+| Package | Distribution name | What it is |
 |---------|-----------|------------|
 | [`packages/docmost-client`](packages/docmost-client) | `docmost-client` | Typed sync + async Python client |
 | [`packages/yugen-docmost-mcp`](packages/yugen-docmost-mcp) | `yugen-docmost-mcp` | MCP server (stdio) built on the client |
@@ -25,7 +25,11 @@ internal API the Docmost web app uses, with read-only access by default.
      "mcpServers": {
        "docmost": {
          "command": "uvx",
-         "args": ["yugen-docmost-mcp"],
+         "args": [
+           "--from",
+           "git+ssh://git@github.com/YugenLabsTI/shrd-docmost-mcp@yugen-docmost-mcp-v0.1.0#subdirectory=packages/yugen-docmost-mcp",
+           "yugen-docmost-mcp"
+         ],
          "env": {
            "DOCMOST_BASE_URL": "https://wiki.example.com",
            "DOCMOST_EMAIL": "agent@example.com",
@@ -37,7 +41,10 @@ internal API the Docmost web app uses, with read-only access by default.
    }
    ```
 
-   Until the packages are published, run from a checkout instead:
+   The packages are not on PyPI yet: `uvx` installs the server from a release tag of this
+   repository (see [Releases and versioning](#releases-and-versioning)), and builds
+   `docmost-client` from the same commit. It needs read access to the repository over SSH
+   (or HTTPS after `gh auth setup-git`). To run your own checkout instead:
    `"command": "uv", "args": ["run", "--directory", "/path/to/shrd-docmost-mcp", "yugen-docmost-mcp"]`.
 3. Ask the agent to search the wiki. Writes stay disabled until you set
    `DOCMOST_READ_ONLY=0`.
@@ -342,7 +349,57 @@ set -a; . dev/docmost/.env.test; set +a
 DOCMOST_INTEGRATION=1 uv run pytest -m integration
 ```
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/); they decide
+the next versions (see below).
+
+## Releases and versioning
+
+Both packages are versioned and released independently, from CI, with
+[release-please](https://github.com/googleapis/release-please):
+
+1. Every push to `main` whose checks all pass updates one release pull request. It bumps
+   the version of each package that changed (in its `pyproject.toml` and in `uv.lock`)
+   and adds the commits to that package's `CHANGELOG.md`.
+2. Merging the release pull request tags each bumped package, as
+   `docmost-client-vX.Y.Z` or `yugen-docmost-mcp-vX.Y.Z`, and publishes a GitHub release
+   with its notes.
+3. To upgrade, change the tag in the MCP host configuration (see the Quick path).
+
+A failing check in either package stops the release of both: the release job runs only
+after lint, the tests, the dependency audit and the wheel check pass on that commit. A
+test also fails when `yugen-docmost-mcp`'s `docmost-client` range no longer includes the
+client's version, because uv does not check ranges between workspace members.
+
+| Commit | Before 1.0 | From 1.0 |
+|--------|------------|----------|
+| `fix:` | patch | patch |
+| `feat:` | patch | minor |
+| `feat!:` or a `BREAKING CHANGE:` footer | minor | major |
+
+A commit counts for a package only when it changes files in that package's directory.
+`perf:`, `revert:` and `docs:` count as patches; `chore:`, `ci:`, `test:`, `refactor:`,
+`build:` and `style:` never start a release.
+
+**Why 0.x.** Under [Semantic Versioning](https://semver.org/), 0.x is initial
+development and the public API may still change. Both packages depend on Docmost's
+internal API, so 1.0 waits until:
+
+- the public API is reviewed and frozen: `docmost_client.__all__`, the MCP tools and
+  their arguments, the error codes and the `DOCMOST_*` settings;
+- the packages have been used in production for a few releases without a breaking
+  change;
+- at least two Docmost versions are in the [compatibility](#compatibility) matrix;
+- the integration tests run in CI, and a deprecation policy is written down.
+
+A commit with a `Release-As: 1.0.0` footer starts 1.0; the MCP's `docmost-client` range
+then becomes `>=1.0,<2`.
+
+**Maintainers.** The release job uses the workflow's `GITHUB_TOKEN`, so the repository
+must allow GitHub Actions to create pull requests (Settings → Actions → General →
+Workflow permissions). Pull requests opened with that token do not trigger workflows, so
+the job starts CI on the release pull request's branch itself; wait for it to pass
+before merging.
+Publishing to PyPI is planned for when the repository is public.
 
 ## License
 
