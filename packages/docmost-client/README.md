@@ -24,4 +24,4 @@ with DocmostClient.from_env() as docmost:  # reads DOCMOST_* environment variabl
 - The JWT stays in memory and is revoked when the client is closed.
 - Errors are subclasses of `DocmostError` with a stable `code`.
 
-See the [project README](../../README.md) for configuration, formats, and limitations.
+See the [project README](https://github.com/YugenLabsTI/shrd-docmost-mcp#readme) for configuration, formats, and limitations.

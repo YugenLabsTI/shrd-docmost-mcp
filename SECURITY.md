@@ -2,8 +2,9 @@
 
 ## Reporting a vulnerability
 
-Report vulnerabilities privately to the maintainers (Yugen Labs) rather than in a public
-issue. Include the affected version, the configuration (without secrets), and steps to
+Report vulnerabilities privately through
+[GitHub's private vulnerability reporting](https://github.com/YugenLabsTI/shrd-docmost-mcp/security/advisories/new)
+rather than in a public issue. Include the affected version, the configuration (without secrets), and steps to
 reproduce.
 
 ## Threat model
@@ -29,7 +30,7 @@ data (prompt injection). The design limits what a misled agent can do.
 | Credential theft from disk | Credentials come only from environment variables or `*_FILE` secrets. The JWT is kept in memory only and revoked on shutdown (logout). |
 | Token leakage over the network | HTTPS is required unless explicitly overridden. Redirects are never followed and cookies are refused, so the token is only sent as a bearer header to the configured host. |
 | Secrets or page text in logs | Errors name settings and status codes, never values; response validation errors never echo input; tool failures log codes only. |
-| Supply-chain compromise | Only mainstream PyPI dependencies, locked with hashes. CI audits locked runtime dependencies with `pip-audit`, and GitHub Actions are pinned by commit SHA. Releases are tagged by CI from `main` only after every check passes. |
+| Supply-chain compromise | Only mainstream PyPI dependencies, locked with hashes. CI audits locked runtime dependencies with `pip-audit`, and GitHub Actions are pinned by commit SHA. Releases are tagged by CI from `main` only after every check passes, published with Trusted Publishing (no PyPI token in the repository), installed from TestPyPI before they reach PyPI, and published to PyPI only after a maintainer approves. |
 
 ## Recommended deployment
 

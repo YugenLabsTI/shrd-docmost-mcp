@@ -25,11 +25,7 @@ internal API the Docmost web app uses, with read-only access by default.
      "mcpServers": {
        "docmost": {
          "command": "uvx",
-         "args": [
-           "--from",
-           "git+ssh://git@github.com/YugenLabsTI/shrd-docmost-mcp@yugen-docmost-mcp-v0.1.0#subdirectory=packages/yugen-docmost-mcp",
-           "yugen-docmost-mcp"
-         ],
+         "args": ["yugen-docmost-mcp@0.1.0"],
          "env": {
            "DOCMOST_BASE_URL": "https://wiki.example.com",
            "DOCMOST_EMAIL": "agent@example.com",
@@ -41,13 +37,10 @@ internal API the Docmost web app uses, with read-only access by default.
    }
    ```
 
-   The packages are not on PyPI yet: `uvx` installs the server from a release tag of this
-   repository (see [Releases and versioning](#releases-and-versioning)), and builds
-   `docmost-client` from the same commit. It needs read access to the repository over SSH;
-   over HTTPS, run `gh auth setup-git` once and use
-   `git+https://github.com/YugenLabsTI/shrd-docmost-mcp@<tag>#subdirectory=packages/yugen-docmost-mcp`.
-   Anyone with push access can move a tag; for a fixed build, use the tag's commit SHA
-   instead of the tag. To run your own checkout instead:
+   `uvx` installs the server from PyPI, pinned to one version (use the latest one on
+   [PyPI](https://pypi.org/project/yugen-docmost-mcp/)); to upgrade, change the
+   version (see [Releases and versioning](#releases-and-versioning)). The client alone is
+   `pip install docmost-client`. To run your own checkout instead:
    `"command": "uv", "args": ["run", "--directory", "/path/to/shrd-docmost-mcp", "yugen-docmost-mcp"]`.
 3. Ask the agent to search the wiki. Writes stay disabled until you set
    `DOCMOST_READ_ONLY=0`.
@@ -366,7 +359,14 @@ Both packages are versioned and released independently, from CI, with
 2. Merging the release pull request tags each bumped package, as
    `docmost-client-vX.Y.Z` or `yugen-docmost-mcp-vX.Y.Z`, and publishes a GitHub release
    with its notes.
-3. To upgrade, change the tag in the MCP host configuration (see the Quick path).
+3. The release job then starts the [Publish](.github/workflows/publish.yml) workflow,
+   which always goes through TestPyPI first: it builds each new tag from its own commit,
+   uploads it to [TestPyPI](https://test.pypi.org/), installs those exact versions from
+   TestPyPI and runs them, and only then publishes them to PyPI, once a maintainer
+   approves the `pypi` environment. Both indexes trust this workflow through
+   [Trusted Publishing](https://docs.pypi.org/trusted-publishers/), so the repository
+   holds no PyPI token.
+4. To upgrade, change the version in the MCP host configuration (see the Quick path).
 
 A failing check in either package stops the release of both: the release job runs only
 after lint, the tests, the dependency audit and the wheel check pass on that commit, and
@@ -382,7 +382,8 @@ anyway, every later release job fails until that is resolved:
 - a real defect: do not tag that commit. Fix `main`, tag the fixed commit by hand with
   the release's tag (`git tag docmost-client-vX.Y.Z <sha>`, push it and create its GitHub
   release), and change the release pull request's label from `autorelease: pending` to
-  `autorelease: tagged`.
+  `autorelease: tagged`. Tags pushed by hand start no workflow: start Publish with the
+  new tags (see below).
 
 | Commit | Before 1.0 | From 1.0 |
 |--------|------------|----------|
@@ -415,8 +416,26 @@ empty commit starts it for both); the MCP's `docmost-client` range then becomes
 must allow GitHub Actions to create pull requests (Settings → Actions → General →
 Workflow permissions). Pull requests opened with that token do not trigger workflows, so
 the job starts CI on the release pull request's branch itself; wait for it to pass
-before merging.
-Publishing to PyPI is planned for when the repository is public.
+before merging. A ruleset on `main` requires a pull request whose lint, test, audit and
+build checks pass, and forbids force pushes and deleting the branch.
+
+Publishing needs, on both PyPI and TestPyPI, a trusted publisher for each project
+(owner `YugenLabsTI`, repository `shrd-docmost-mcp`, workflow `publish.yml`, environment
+`testpypi` or `pypi`), and the repository environments `testpypi` and `pypi`, limited to
+`main`, with the maintainers as required reviewers on `pypi`. A failed publication can be
+re-run: uploads skip files that are already on the index (a version, once uploaded,
+cannot be replaced). To publish by hand, start Publish on `main` with the tags, for
+example `gh workflow run publish.yml --ref main -f tags="docmost-client-v0.1.0"`.
+
+The first publication of a project goes through a "pending" trusted publisher, and PyPI
+accepts one pending publisher per configuration at a time. So the first time, publish
+`docmost-client` on its own; once it is on both indexes, register the
+`yugen-docmost-mcp` publishers and publish the server. Until then, do not merge a release
+pull request that releases the server: its automatic publication would fail for the
+server (re-run it once the publishers exist; files already uploaded are skipped).
+
+Release tags are protected: a ruleset forbids moving or deleting `docmost-client-v*` and
+`yugen-docmost-mcp-v*` tags, so a published version always matches its tag.
 
 ## License
 
