@@ -1,4 +1,4 @@
-# shrd-docmost-mcp
+# yugen-docmost-mcp
 
 > **Unofficial, not affiliated with Docmost.** Docmost is a trademark of its owners.
 
@@ -25,7 +25,7 @@ internal API the Docmost web app uses, with read-only access by default.
      "mcpServers": {
        "docmost": {
          "command": "uvx",
-         "args": ["yugen-docmost-mcp@0.1.0"],
+         "args": ["yugen-docmost-mcp@0.1.1"],
          "env": {
            "DOCMOST_BASE_URL": "https://wiki.example.com",
            "DOCMOST_EMAIL": "agent@example.com",
@@ -54,7 +54,7 @@ All settings come from environment variables. Nothing is written to disk.
 | `DOCMOST_BASE_URL` | required | Instance URL. Must be `https://` unless `DOCMOST_ALLOW_INSECURE_HTTP=1`. No credentials, query, or fragment. |
 | `DOCMOST_EMAIL` / `DOCMOST_EMAIL_FILE` | required | Login email, or a file containing it. |
 | `DOCMOST_PASSWORD` / `DOCMOST_PASSWORD_FILE` | required | Password, or a file containing it (preferred). |
-| `DOCMOST_READ_ONLY` | `1` | Set to `0` to enable `create_page` and `update_page`. |
+| `DOCMOST_READ_ONLY` | `1` | Set to `0` to enable `create_page`, `update_page` and `edit_section`. |
 | `DOCMOST_ALLOW_COMMENTS` | `0` | Set to `1` to enable `add_comment`, independently of `DOCMOST_READ_ONLY`. |
 | `DOCMOST_ALLOW_MOVE` | `0` | Set to `1` to enable `move_page`; it also needs `DOCMOST_READ_ONLY=0`. |
 | `DOCMOST_CONFIRM_REPLACE` | `1` | Ask the user to confirm every `replace` (see below). `0` skips the question. |
