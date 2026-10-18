@@ -46,7 +46,8 @@ internal API the Docmost web app uses, with read-only access by default.
    `docmost-client` from the same commit. It needs read access to the repository over SSH;
    over HTTPS, run `gh auth setup-git` once and use
    `git+https://github.com/YugenLabsTI/shrd-docmost-mcp@<tag>#subdirectory=packages/yugen-docmost-mcp`.
-   To run your own checkout instead:
+   Anyone with push access can move a tag; for a fixed build, use the tag's commit SHA
+   instead of the tag. To run your own checkout instead:
    `"command": "uv", "args": ["run", "--directory", "/path/to/shrd-docmost-mcp", "yugen-docmost-mcp"]`.
 3. Ask the agent to search the wiki. Writes stay disabled until you set
    `DOCMOST_READ_ONLY=0`.

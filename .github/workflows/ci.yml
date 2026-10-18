@@ -131,6 +131,9 @@ jobs:
         # at its merge commit, also on a later run. Nothing stops a release PR from being
         # merged before its checks pass, so check the CI run of that commit first.
         if: steps.head.outputs.current == 'true'
+        # An explicit bash adds pipefail, so a failing "gh pr list" fails the step instead
+        # of reading as "no pending release PRs".
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
