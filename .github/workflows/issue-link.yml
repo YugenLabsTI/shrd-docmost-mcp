@@ -1,0 +1,40 @@
+name: Issue link
+
+# Every pull request links an issue labelled status:approved (see CONTRIBUTING.md); the
+# release App and Dependabot are exempt. The "issue" check is required on main.
+#
+# pull_request_target runs this workflow and the script from the default branch, so a
+# pull request cannot rewrite the check that judges it. It never checks out or runs the pull
+# request's code, and the description only reaches the script as data.
+
+on:
+  # zizmor: ignore[dangerous-triggers] base-branch code only; the PR body is read as data
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  issue:
+    name: issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      # The event's default ref: the default branch's latest commit, the same commit this
+      # workflow file comes from. Never the pull request's head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the linked issue
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/check_issue_link.py

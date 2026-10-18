@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a new tool, setting or behavior.
-labels: ["enhancement"]
+labels: ["enhancement", "status:needs-review"]
 body:
   - type: markdown
     attributes:
