@@ -186,7 +186,8 @@ def _http_error(code: int, **headers: str) -> urllib.error.HTTPError:
     message = Message()
     for name, value in headers.items():
         message[name.replace("_", "-")] = value
-    return urllib.error.HTTPError("url", code, "error", message, None)
+    # A body stream, so Python 3.14 needs no temporary file for it.
+    return urllib.error.HTTPError("url", code, "error", message, io.BytesIO())
 
 
 def test_fetch_returns_the_issue(monkeypatch: pytest.MonkeyPatch, sleeps: list[float]) -> None:

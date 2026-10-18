@@ -91,11 +91,13 @@ def fetch_from_github(number: int) -> Issue | None:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             if error.code in (404, 410):
+                error.close()
                 return None
             # A 403 is a rate limit only when GitHub says so; otherwise it is final.
             limited = error.code != 403 or error.headers.get("x-ratelimit-remaining") == "0"
             if error.code not in RETRY_STATUS or not limited or attempt == ATTEMPTS:
                 raise
+            error.close()
         except urllib.error.URLError:
             if attempt == ATTEMPTS:
                 raise
@@ -107,6 +109,8 @@ def main(fetch: Fetch = fetch_from_github) -> int:
     try:
         ok, message = check(os.environ.get("PR_BODY", ""), os.environ["PR_AUTHOR"], fetch)
     except urllib.error.URLError as error:
+        if isinstance(error, urllib.error.HTTPError):
+            error.close()
         # Fail closed, with a reason instead of a traceback.
         sys.stdout.write(
             f"Could not read the linked issues from GitHub ({error}); re-run this check.\n"
