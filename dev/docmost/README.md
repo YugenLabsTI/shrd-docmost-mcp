@@ -18,6 +18,10 @@ uv run python dev/docmost/bootstrap.py   # writes dev/docmost/.env.test (git-ign
 docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env down -v
 ```
 
+CI's `integration` job runs these same steps on every pull request and push to `main`
+(see [ci.yml](../../.github/workflows/ci.yml)). The images are pinned by digest and
+Dependabot proposes their updates.
+
 Seeded data:
 
 | Space | Agent role | Pages |

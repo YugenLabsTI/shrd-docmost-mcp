@@ -3,13 +3,14 @@
 #
 #   docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env up -d
 #
-# dev/docmost/.env (git-ignored) must define APP_SECRET and POSTGRES_PASSWORD; the
-# bootstrap script creates it.
+# dev/docmost/.env (git-ignored) must define APP_SECRET and POSTGRES_PASSWORD (step 1 of
+# dev/docmost/README.md creates it). Images are pinned by digest; Dependabot proposes
+# their updates.
 name: docmost-dev
 
 services:
   docmost:
-    image: docmost/docmost:0.96.0
+    image: docmost/docmost:0.96.0@sha256:b56947fcfd08aab8fae12a377e1792784786adbf8b96e4281f14ef4fc072685a
     depends_on:
       - db
       - redis
@@ -25,7 +26,7 @@ services:
       - docmost:/app/data/storage
 
   db:
-    image: postgres:18
+    image: postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     environment:
       POSTGRES_DB: docmost
       POSTGRES_USER: docmost
@@ -34,7 +35,7 @@ services:
       - db_data:/var/lib/postgresql
 
   redis:
-    image: redis:8
+    image: redis:8@sha256:2c2dff791878316e3b083188be0d578423b24813cdda5de0e80ea4f7b3e6bfd6
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis_data:/data
