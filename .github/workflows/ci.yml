@@ -113,7 +113,7 @@ jobs:
       - name: Wait until Docmost reaches its database and Redis
         run: |
           for _ in $(seq 60); do
-            if curl -fsS -o /dev/null http://127.0.0.1:3000/api/health; then
+            if curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3000/api/health; then
               exit 0
             fi
             sleep 5
@@ -122,6 +122,10 @@ jobs:
           exit 1
       - name: Seed Docmost
         run: uv run python dev/docmost/bootstrap.py
+      - name: Wait for Docmost's login limit to reset
+        # Docmost allows 10 logins per minute per IP. Seeding used 2 and the tests use all 10,
+        # so start them in a fresh window.
+        run: sleep 65
       - name: Run the integration tests
         run: |
           set -a
@@ -141,10 +145,10 @@ jobs:
           sys.exit(tests == 0 or skipped > 0)
           EOF
       - name: Show the Docmost logs
-        if: failure()
+        if: failure() && hashFiles('dev/docmost/.env') != ''
         run: docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env logs --no-color --tail 200
       - name: Tear down Docmost
-        if: always()
+        if: always() && hashFiles('dev/docmost/.env') != ''
         run: docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env down -v
 
   release:

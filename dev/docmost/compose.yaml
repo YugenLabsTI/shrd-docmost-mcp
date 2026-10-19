@@ -3,8 +3,9 @@
 #
 #   docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env up -d
 #
-# dev/docmost/.env (git-ignored) must define APP_SECRET and POSTGRES_PASSWORD; the
-# bootstrap script creates it. Images are pinned by digest; Dependabot proposes updates.
+# dev/docmost/.env (git-ignored) must define APP_SECRET and POSTGRES_PASSWORD (step 1 of
+# dev/docmost/README.md creates it). Images are pinned by digest; Dependabot proposes
+# their updates.
 name: docmost-dev
 
 services:
