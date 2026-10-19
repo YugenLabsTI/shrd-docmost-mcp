@@ -345,6 +345,9 @@ set -a; . dev/docmost/.env.test; set +a
 DOCMOST_INTEGRATION=1 uv run pytest -m integration
 ```
 
+CI runs them the same way in the `integration` job, on every pull request and push to
+`main`.
+
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/); they decide
 the next versions (see below). See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a
 pull request.
@@ -407,7 +410,7 @@ internal API, so 1.0 waits until:
 - the packages have been used in production for a few releases without a breaking
   change;
 - at least two Docmost versions are in the [compatibility](#compatibility) matrix;
-- the integration tests run in CI, and a deprecation policy is written down.
+- a deprecation policy is written down.
 
 A commit with a `Release-As: 1.0.0` footer starts 1.0 for the packages it changes (an
 empty commit starts it for both); the MCP's `docmost-client` range then becomes
@@ -431,7 +434,8 @@ release App's and Dependabot's pull requests without one. The exempt accounts ar
 by login in `.github/scripts/check_issue_link.py`, so renaming the App means updating
 that list. The check always runs from `main`, so a broken check there also judges the
 pull request that fixes it: remove `issue` from the ruleset's required checks, merge the
-fix, then require it again.
+fix, then require it again. The `integration` job is not a required check yet; add it to
+the ruleset once it has proven stable.
 
 Publishing needs, on both PyPI and TestPyPI, a trusted publisher for each project
 (owner `YugenLabsTI`, repository `shrd-docmost-mcp`, workflow `publish.yml`, environment

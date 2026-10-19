@@ -92,6 +92,61 @@ jobs:
           test "$actual" = "$expected"
           wheel-env/bin/python -I -c "import docmost_client, yugen_docmost_mcp"
 
+  integration:
+    # Runs the integration tests against the disposable Docmost from dev/docmost, set up as
+    # its README does. Everything stays on the runner: throwaway secrets, no repository
+    # secrets and no real instance, so it runs the same on pull requests from forks.
+    # Not a required check yet, and not one the release waits for.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv sync --locked
+      - name: Start Docmost
+        run: |
+          umask 077
+          printf "APP_SECRET=%s\nPOSTGRES_PASSWORD=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -hex 16)" > dev/docmost/.env
+          docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env up -d --quiet-pull
+      - name: Wait until Docmost reaches its database and Redis
+        run: |
+          for _ in $(seq 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Docmost was not healthy after 5 minutes."
+          exit 1
+      - name: Seed Docmost
+        run: uv run python dev/docmost/bootstrap.py
+      - name: Run the integration tests
+        run: |
+          set -a
+          . dev/docmost/.env.test
+          set +a
+          DOCMOST_INTEGRATION=1 uv run pytest -m integration --junitxml="$RUNNER_TEMP/integration.xml"
+      - name: Fail if an integration test was skipped
+        # The tests skip themselves when a variable is missing, which pytest reports as a pass.
+        run: |
+          python3 -I - "$RUNNER_TEMP/integration.xml" <<'EOF'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          suite = ET.parse(sys.argv[1]).getroot().find("testsuite")
+          tests, skipped = int(suite.get("tests")), int(suite.get("skipped"))
+          print(f"{tests} integration tests, {skipped} skipped")
+          sys.exit(tests == 0 or skipped > 0)
+          EOF
+      - name: Show the Docmost logs
+        if: failure()
+        run: docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env logs --no-color --tail 200
+      - name: Tear down Docmost
+        if: always()
+        run: docker compose -f dev/docmost/compose.yaml --env-file dev/docmost/.env down -v
+
   release:
     # Opens or updates the release PR, and tags and releases the packages a merged release
     # PR bumped. It runs only on a push to main whose every check passed, so a failure in

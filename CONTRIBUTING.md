@@ -19,7 +19,8 @@ go through [private vulnerability reporting](SECURITY.md), never a public issue.
 
 3. Open a pull request against `main` whose description links the issue (`Closes #12`).
    CI must pass (lint, tests on Python 3.11 to 3.14, dependency audit, wheel check, and
-   the `issue` check) before it can be merged.
+   the `issue` check) before it can be merged. CI also runs the integration tests against
+   a disposable Docmost (`integration`); that check is not required yet.
 
 ## Issues first
 
