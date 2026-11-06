@@ -1,0 +1,7 @@
+{
+  "body": {
+    "message": "Too many requests",
+    "statusCode": 429
+  },
+  "status": 429
+}

@@ -352,6 +352,19 @@ def test_compatibility_of_a_supported_version(client: DocmostClient, api: respx.
     assert report.docmost_version == "0.96.0"
 
 
+@pytest.mark.parametrize("version", ["0.96.0", "0.97.0"])
+def test_every_tested_docmost_version_is_supported(
+    client: DocmostClient, api: respx.MockRouter, version: str
+) -> None:
+    api.post(f"{API}/version").mock(return_value=wrapped({"currentVersion": version}))
+
+    report = client.check_compatibility()
+
+    assert report.status == "supported"
+    assert report.docmost_version == version
+    assert report.supported_versions == ("0.96.0", "0.97.0")
+
+
 def test_compatibility_of_an_unknown_version_is_a_warning(
     client: DocmostClient, api: respx.MockRouter
 ) -> None:
@@ -364,7 +377,7 @@ def test_compatibility_of_an_unknown_version_is_a_warning(
 
 
 def test_untested_version_is_refused(client: DocmostClient, api: respx.MockRouter) -> None:
-    api.post(f"{API}/version").mock(return_value=wrapped({"currentVersion": "0.97.0"}))
+    api.post(f"{API}/version").mock(return_value=wrapped({"currentVersion": "99.0.0"}))
 
     with pytest.raises(UnsupportedVersionError, match="DOCMOST_ALLOW_UNTESTED_VERSION") as exc:
         client.check_compatibility()
@@ -373,13 +386,13 @@ def test_untested_version_is_refused(client: DocmostClient, api: respx.MockRoute
 
 
 def test_untested_version_can_be_explicitly_allowed(api: respx.MockRouter) -> None:
-    api.post(f"{API}/version").mock(return_value=wrapped({"currentVersion": "0.97.0"}))
+    api.post(f"{API}/version").mock(return_value=wrapped({"currentVersion": "99.0.0"}))
 
     with DocmostClient(settings(DOCMOST_ALLOW_UNTESTED_VERSION="1")) as client:
         report = client.check_compatibility()
 
     assert report.status == "untested"
-    assert report.docmost_version == "0.97.0"
+    assert report.docmost_version == "99.0.0"
 
 
 @pytest.mark.anyio

@@ -1,4 +1,4 @@
-"""Integration tests against the local Docmost 0.96.0 from dev/docmost.
+"""Integration tests against the local Docmost 0.97.0 from dev/docmost.
 
 Opt-in: they run only with DOCMOST_INTEGRATION=1 and the variables written by
 dev/docmost/bootstrap.py (``set -a; . dev/docmost/.env.test; set +a``). They log in as
@@ -76,7 +76,7 @@ def test_server_is_a_supported_version(reader: DocmostClient) -> None:
     report = reader.check_compatibility()
 
     assert report.status == "supported"
-    assert report.docmost_version == "0.96.0"
+    assert report.docmost_version == "0.97.0"
 
 
 def test_agent_sees_its_spaces_only(reader: DocmostClient) -> None:
@@ -185,6 +185,47 @@ def test_html_round_trip_preserves_rich_content(writer: DocmostClient, rich: Pag
     original = writer.get_page(rich.id, format="markdown")
 
     assert reread.content == original.content
+
+
+TABS_HTML = (
+    '<div data-type="tabs">'
+    '<div data-type="tab" data-tab-id="tab-windows"><div data-type="tabLabel">Windows</div>'
+    '<div data-type="tabPanel"><p>Run setup.exe</p></div></div>'
+    '<div data-type="tab" data-tab-id="tab-linux"><div data-type="tabLabel">Linux</div>'
+    '<div data-type="tabPanel"><p>Run setup.sh</p></div></div>'
+    "</div>"
+)
+
+
+def test_tabs_round_trip_in_html_and_read_as_headings_in_markdown(writer: DocmostClient) -> None:
+    page = writer.create_page(
+        space="sandbox", title=f"Tabs {uuid.uuid4().hex[:8]}", content=TABS_HTML, format="html"
+    )
+    current = writer.get_page(page.id, format="html")
+    assert isinstance(current.content, str)
+    assert current.content.count('data-type="tab"') == 2
+    assert 'data-tab-id="tab-windows"' in current.content
+    assert 'data-tab-id="tab-linux"' in current.content
+
+    rewritten = writer.update_page(
+        page.id,
+        content=current.content.replace("Run setup.sh", "Run install.sh"),
+        operation="replace",
+        format="html",
+        expected_updated_at=current.updated_at,
+    )
+    assert isinstance(rewritten.content, str)
+    assert rewritten.content.count('data-type="tab"') == 2
+    assert 'data-tab-id="tab-linux"' in rewritten.content
+    assert "Run install.sh" in rewritten.content
+
+    markdown = writer.get_page(page.id, format="markdown").content
+    assert isinstance(markdown, str)
+    assert "#### Windows\n\nRun setup.exe" in markdown
+    assert "#### Linux\n\nRun install.sh" in markdown
+    assert "data-type" not in markdown
+    # Tab labels are not headings: tabs never show up as editable sections.
+    assert writer.get_page_outline(page.id).headings == []
 
 
 def test_precheck_tolerates_equal_instants_in_other_offsets(writer: DocmostClient) -> None:

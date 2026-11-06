@@ -1,0 +1,8 @@
+{
+  "body": {
+    "error": "Unauthorized",
+    "message": "Email or password does not match",
+    "statusCode": 401
+  },
+  "status": 401
+}

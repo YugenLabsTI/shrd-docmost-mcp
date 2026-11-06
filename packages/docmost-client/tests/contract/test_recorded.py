@@ -1,12 +1,14 @@
-"""Contract tests against responses recorded from a real Docmost 0.96.0.
+"""Contract tests against responses recorded from every supported Docmost version.
 
-Fixtures under fixtures/v0_96_0/recorded come from dev/docmost/record_fixtures.py run
-against the local dev instance. These tests prove that the models parse real responses,
-that real error bodies map to the right typed errors, and that the synthesized fixtures
-used by the unit tests only contain fields Docmost actually returns.
+Fixtures under fixtures/v<version>/recorded come from dev/docmost/record_fixtures.py run
+against the local dev instance. Every test runs once per version in
+SUPPORTED_DOCMOST_VERSIONS. These tests prove that the models parse real responses, that
+real error bodies map to the right typed errors, and that the synthesized fixtures used
+by the unit tests only contain fields every supported Docmost actually returns.
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -31,17 +33,35 @@ from docmost_client._ops import (
     search,
 )
 from docmost_client._protocol import token_from_login, unwrap
+from docmost_client.compat import SUPPORTED_DOCMOST_VERSIONS
 from docmost_client.errors import AuthenticationError, DocmostError
 from docmost_client.models import ContentFormat
 from docmost_client.policy import SpaceAllowlist
 
-FIXTURES = Path(__file__).parent.parent / "fixtures" / "v0_96_0"
-RECORDED = FIXTURES / "recorded"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
+SYNTHESIZED = FIXTURES / "v0_96_0"
 OPEN = SpaceAllowlist(None)
 
+Recorded = Callable[[str], Any]
 
-def recorded(name: str) -> Any:
-    return json.loads((RECORDED / f"{name}.json").read_text())
+
+@pytest.fixture(params=SUPPORTED_DOCMOST_VERSIONS)
+def version(request: pytest.FixtureRequest) -> str:
+    return request.param
+
+
+@pytest.fixture
+def recorded(version: str) -> Recorded:
+    directory = FIXTURES / f"v{version.replace('.', '_')}" / "recorded"
+
+    def load(name: str) -> Any:
+        return json.loads((directory / f"{name}.json").read_text())
+
+    return load
+
+
+def test_fixtures_were_recorded_from_that_version(version: str, recorded: Recorded) -> None:
+    assert recorded("version")["currentVersion"] == version
 
 
 def replay(responses: dict[str, Any]) -> Any:
@@ -54,21 +74,21 @@ def replay(responses: dict[str, Any]) -> Any:
     return call
 
 
-def test_current_user_parses() -> None:
+def test_current_user_parses(recorded: Recorded) -> None:
     user = drive(me(), replay({"/users/me": recorded("users_me")}))
 
     assert user.email == "agent@example.com"
     assert user.workspace_id
 
 
-def test_spaces_parse() -> None:
+def test_spaces_parse(recorded: Recorded) -> None:
     page = drive(list_spaces(OPEN, 20, None, None), replay({"/spaces": recorded("spaces_list")}))
 
     assert {space.slug for space in page.items} >= {"engineering", "sandbox"}
     assert all(space.role in {"admin", "writer", "reader"} for space in page.items)
 
 
-def test_space_info_parses() -> None:
+def test_space_info_parses(recorded: Recorded) -> None:
     space = drive(get_space(OPEN, "engineering"), replay({"/spaces/info": recorded("space_info")}))
 
     assert space.slug == "engineering"
@@ -76,7 +96,7 @@ def test_space_info_parses() -> None:
 
 
 @pytest.mark.parametrize("fmt", ["markdown", "html", "json"])
-def test_page_info_parses_in_every_format(fmt: ContentFormat) -> None:
+def test_page_info_parses_in_every_format(fmt: ContentFormat, recorded: Recorded) -> None:
     page = drive(get_page(OPEN, "x", fmt), replay({"/pages/info": recorded(f"page_info_{fmt}")}))
 
     assert page.title == "Runbook"
@@ -91,7 +111,7 @@ def test_page_info_parses_in_every_format(fmt: ContentFormat) -> None:
         assert "Restart the worker pool" in page.content
 
 
-def test_sidebar_pages_parse() -> None:
+def test_sidebar_pages_parse(recorded: Recorded) -> None:
     children = drive(
         list_children(OPEN, None, "0192b7a4-0000-7000-8000-000000000000", 20, None),
         replay({"/pages/sidebar-pages": recorded("sidebar_pages")}),
@@ -106,7 +126,7 @@ def test_sidebar_pages_parse() -> None:
     assert next(p for p in roots.items if p.title == "Runbook").has_children is True
 
 
-def test_search_parses() -> None:
+def test_search_parses(recorded: Recorded) -> None:
     results = drive(
         search(OPEN, "worker", None, 10, 0, False), replay({"/search": recorded("search")})
     )
@@ -115,7 +135,7 @@ def test_search_parses() -> None:
     assert all("<b>worker</b>" in (hit.highlight or "") for hit in results.hits)
 
 
-def test_update_response_includes_new_content_and_timestamp() -> None:
+def test_update_response_includes_new_content_and_timestamp(recorded: Recorded) -> None:
     created = recorded("page_create")
     updated = recorded("page_update")
 
@@ -130,13 +150,12 @@ def test_update_response_includes_new_content_and_timestamp() -> None:
         ("space_not_member", NotFoundError, "Space permissions not found"),
         ("page_not_found", NotFoundError, "Page not found"),
         ("update_without_operation", InvalidRequestError, "operation must be one of"),
-        ("content_without_format", InvalidRequestError, "format must be one of"),
         ("write_as_reader", PermissionDeniedError, "Forbidden"),
         ("body_too_large", InvalidRequestError, "Request body is too large"),
     ],
 )
 def test_recorded_errors_map_to_typed_errors(
-    name: str, error: type[DocmostError], message: str
+    name: str, error: type[DocmostError], message: str, recorded: Recorded
 ) -> None:
     record = recorded(f"errors/{name}")
     response = httpx.Response(record["status"], json=record["body"])
@@ -145,7 +164,22 @@ def test_recorded_errors_map_to_typed_errors(
         unwrap(response)
 
 
-def test_recorded_login_errors_map_to_typed_errors() -> None:
+# 0.97.0 defaults a missing format to json, so text content fails to parse instead.
+CONTENT_WITHOUT_FORMAT = {
+    "0.96.0": "format must be one of",
+    "0.97.0": "Invalid content format",
+}
+
+
+def test_content_without_format_is_rejected(version: str, recorded: Recorded) -> None:
+    record = recorded("errors/content_without_format")
+    response = httpx.Response(record["status"], json=record["body"])
+
+    with pytest.raises(InvalidRequestError, match=CONTENT_WITHOUT_FORMAT[version]):
+        unwrap(response)
+
+
+def test_recorded_login_errors_map_to_typed_errors(recorded: Recorded) -> None:
     rejected = recorded("errors/login_rejected")
     limited = recorded("errors/login_rate_limited")
 
@@ -195,8 +229,8 @@ def _empty_list_paths(value: Any, prefix: str = "") -> set[str]:
         "comment_create",
     ],
 )
-def test_synthesized_fixtures_only_use_real_fields(name: str) -> None:
-    synthesized = json.loads((FIXTURES / f"{name}.json").read_text())
+def test_synthesized_fixtures_only_use_real_fields(name: str, recorded: Recorded) -> None:
+    synthesized = json.loads((SYNTHESIZED / f"{name}.json").read_text())
     real = recorded(name)
     unseen = {
         key
@@ -207,7 +241,7 @@ def test_synthesized_fixtures_only_use_real_fields(name: str) -> None:
     assert unseen == set()
 
 
-def test_recent_pages_parse() -> None:
+def test_recent_pages_parse(recorded: Recorded) -> None:
     result = drive(
         list_recent_pages(OPEN, None, 5, None),
         replay({"/pages/recent": recorded("recent_pages")}),
@@ -217,7 +251,7 @@ def test_recent_pages_parse() -> None:
     assert all(page.space.slug == "sandbox" for page in result.items)
 
 
-def test_comments_parse_as_plain_text() -> None:
+def test_comments_parse_as_plain_text(recorded: Recorded) -> None:
     created = recorded("comment_create")
     page = recorded("page_info_markdown") | {"id": created["pageId"]}
     result = drive(

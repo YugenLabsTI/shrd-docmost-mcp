@@ -1,4 +1,4 @@
-"""Seed a local, disposable Docmost 0.96.0 started from dev/docmost/compose.yaml.
+"""Seed a local, disposable Docmost 0.97.0 started from dev/docmost/compose.yaml.
 
 Creates an admin, an "agent" member, three spaces and sample pages, then writes the
 credentials to dev/docmost/.env.test (git-ignored). Refuses any non-local base URL.

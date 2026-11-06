@@ -15,7 +15,8 @@ ContentFormat = Literal["markdown", "html", "json"]
 """Content formats Docmost v0.96.0 accepts for reading and writing pages.
 
 - ``markdown``: compact and readable; lossy (drops comments anchors, mentions, colors,
-  diagrams, embeds, and turns single newlines into hard breaks).
+  diagrams, embeds, flattens tabs into headings, and turns single newlines into hard
+  breaks).
 - ``html``: round-trips nearly everything the editor supports.
 - ``json``: the editor's ProseMirror document; exact but verbose.
 """

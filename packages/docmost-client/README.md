@@ -3,7 +3,7 @@
 > **Unofficial, not affiliated with Docmost.**
 
 Typed sync and async Python client for the internal API of self-hosted
-**Docmost Community Edition** (tested with Docmost 0.96.0).
+**Docmost Community Edition** (tested with Docmost 0.96.0 and 0.97.0).
 
 ```python
 from docmost_client import DocmostClient

@@ -1,0 +1,67 @@
+{
+  "items": [
+    {
+      "createdAt": "2026-11-06T17:11:07.862Z",
+      "creatorId": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+      "highlight": "Stop the <b>worker</b>, then start it again",
+      "icon": null,
+      "id": "01a1b1d7-bb56-77b2-9d78-54993fac533d",
+      "matchedText": [
+        "worker"
+      ],
+      "parentPageId": "01a1b1d7-ba7a-7fe7-91d0-33b2567b07ae",
+      "rank": 0.24317084,
+      "slugId": "WKhBfVuvjP",
+      "space": {
+        "id": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+        "name": "Engineering",
+        "slug": "engineering"
+      },
+      "title": "Restart procedure",
+      "updatedAt": "2026-11-06T17:11:07.862Z",
+      "wholeWord": true
+    },
+    {
+      "createdAt": "2026-11-06T17:11:07.642Z",
+      "creatorId": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+      "highlight": "Runbook Restart the <b>worker</b> pool when the queue backs",
+      "icon": null,
+      "id": "01a1b1d7-ba7a-7fe7-91d0-33b2567b07ae",
+      "matchedText": [
+        "worker"
+      ],
+      "parentPageId": null,
+      "rank": 0.24317084,
+      "slugId": "xQ5VxtuWAL",
+      "space": {
+        "id": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+        "name": "Engineering",
+        "slug": "engineering"
+      },
+      "title": "Runbook",
+      "updatedAt": "2026-11-06T17:11:07.642Z",
+      "wholeWord": true
+    },
+    {
+      "createdAt": "2026-11-06T17:11:07.957Z",
+      "creatorId": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+      "highlight": "Service matrix Service Owner <b>worker</b> platform Restart only during",
+      "icon": null,
+      "id": "01a1b1d7-bbb6-72e1-904c-dae28743f757",
+      "matchedText": [
+        "worker"
+      ],
+      "parentPageId": null,
+      "rank": 0.24317084,
+      "slugId": "jDiPw3ecFI",
+      "space": {
+        "id": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+        "name": "Engineering",
+        "slug": "engineering"
+      },
+      "title": "Rich page",
+      "updatedAt": "2026-11-06T17:11:07.957Z",
+      "wholeWord": true
+    }
+  ]
+}

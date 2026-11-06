@@ -1,4 +1,4 @@
-"""End-to-end MCP tests against the local Docmost 0.96.0 from dev/docmost.
+"""End-to-end MCP tests against the local Docmost 0.97.0 from dev/docmost.
 
 Opt-in: DOCMOST_INTEGRATION=1 plus the variables from dev/docmost/.env.test. The agent
 writes only to the sandbox space.

@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "canEdit": false,
+      "creatorId": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+      "deletedAt": null,
+      "hasChildren": false,
+      "icon": null,
+      "id": "01a1b1d7-bb56-77b2-9d78-54993fac533d",
+      "isBase": false,
+      "parentPageId": "01a1b1d7-ba7a-7fe7-91d0-33b2567b07ae",
+      "position": "a07t4",
+      "slugId": "WKhBfVuvjP",
+      "spaceId": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+      "title": "Restart procedure",
+      "updatedAt": "2026-11-06T17:11:07.862Z"
+    }
+  ],
+  "meta": {
+    "hasNextPage": false,
+    "hasPrevPage": false,
+    "limit": 20,
+    "nextCursor": null,
+    "prevCursor": null
+  }
+}

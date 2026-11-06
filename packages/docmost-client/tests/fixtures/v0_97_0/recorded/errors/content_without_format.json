@@ -1,0 +1,8 @@
+{
+  "body": {
+    "error": "Bad Request",
+    "message": "Invalid content format",
+    "statusCode": 400
+  },
+  "status": 400
+}
