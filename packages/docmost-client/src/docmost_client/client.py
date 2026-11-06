@@ -35,7 +35,7 @@ DEFAULT_SEARCH_RESULTS = 10
 
 
 class DocmostClient:
-    """Blocking client for a Docmost v0.96.0 instance."""
+    """Blocking client for a Docmost instance (see ``SUPPORTED_DOCMOST_VERSIONS``)."""
 
     def __init__(self, settings: DocmostSettings, *, session: Session | None = None) -> None:
         self._settings = settings
@@ -291,7 +291,7 @@ class DocmostClient:
 
 
 class AsyncDocmostClient:
-    """Asynchronous client for a Docmost v0.96.0 instance."""
+    """Asynchronous client for a Docmost instance (see ``SUPPORTED_DOCMOST_VERSIONS``)."""
 
     def __init__(self, settings: DocmostSettings, *, session: AsyncSession | None = None) -> None:
         self._settings = settings

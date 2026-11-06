@@ -94,6 +94,13 @@ def test_search_finds_seeded_pages(reader: DocmostClient) -> None:
     assert {"Runbook", "Restart procedure"} <= titles
 
 
+def test_search_queries_are_limited_to_200_characters(reader: DocmostClient) -> None:
+    assert reader.search("x" * 200).hits == []
+
+    with pytest.raises(InvalidRequestError, match="shorter than or equal to 200 characters"):
+        reader.search("x" * 201)
+
+
 def test_page_tree_by_slug(reader: DocmostClient) -> None:
     runbook = next(
         page for page in reader.list_children(space="engineering").items if page.title == "Runbook"
