@@ -308,7 +308,9 @@ which can change in any release. Each version below has contract fixtures and te
 | 0.1.2 and later | 0.96.0, 0.97.0 |
 
 `yugen-docmost-mcp` supports the Docmost versions of the `docmost-client` installed with
-it. To use Docmost 0.97.0, upgrade `docmost-client` to 0.1.2 or later.
+it. From `yugen-docmost-mcp` 0.1.3 it requires `docmost-client` 0.1.2 or later, so
+upgrading the server also brings Docmost 0.97.0 support. With an older server, upgrade
+`docmost-client` to 0.1.2 or later yourself.
 
 On the first tool call the server asks Docmost for its version. An untested version is
 refused unless `DOCMOST_ALLOW_UNTESTED_VERSION=1`. If Docmost cannot report its version

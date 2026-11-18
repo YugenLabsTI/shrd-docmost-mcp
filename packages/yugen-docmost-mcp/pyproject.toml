@@ -16,7 +16,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "docmost-client>=0.1.0,<0.2",
+    "docmost-client>=0.1.2,<0.2",
     "mcp>=2.3.0,<3",
 ]
 
