@@ -1,7 +1,8 @@
-"""Typed views of Docmost v0.96.0 API responses.
+"""Typed views of Docmost API responses (the versions in ``SUPPORTED_DOCMOST_VERSIONS``).
 
 Models ignore unknown fields so additive server changes do not break parsing, and expose
-snake_case attributes. Field provenance is documented in docs/docmost-api-v0.96.0.md.
+snake_case attributes. Field provenance is documented in docs/docmost-api-v0.96.0.md and
+the changes since then in docs/docmost-api-v0.97.0.md.
 """
 
 import json
@@ -12,10 +13,11 @@ from pydantic import AliasPath, BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 ContentFormat = Literal["markdown", "html", "json"]
-"""Content formats Docmost v0.96.0 accepts for reading and writing pages.
+"""Content formats Docmost accepts for reading and writing pages.
 
 - ``markdown``: compact and readable; lossy (drops comments anchors, mentions, colors,
-  diagrams, embeds, and turns single newlines into hard breaks).
+  diagrams, embeds, flattens tabs into headings, and turns single newlines into hard
+  breaks).
 - ``html``: round-trips nearly everything the editor supports.
 - ``json``: the editor's ProseMirror document; exact but verbose.
 """

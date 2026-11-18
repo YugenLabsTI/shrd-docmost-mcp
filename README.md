@@ -178,11 +178,12 @@ on stderr.
 
 | Format | Read | Write | Use for |
 |--------|------|-------|---------|
-| `markdown` | Compact; drops comments, mentions, colors, diagrams, embeds | Every single newline becomes a line break | Reading, appending prose |
+| `markdown` | Compact; drops comments, mentions, colors, diagrams, embeds; tabs read as `####` headings | Every single newline becomes a line break | Reading, appending prose |
 | `html` | Keeps nearly everything | Round-trips what was read | Replacing rich pages (read html, edit, write html) |
 | `json` | The exact ProseMirror document | Lightly validated by Docmost | Precise structural edits |
 
-Details and evidence: [docs/docmost-api-v0.96.0.md](docs/docmost-api-v0.96.0.md#5-content-formats-s5).
+Details and evidence: [docs/docmost-api-v0.96.0.md](docs/docmost-api-v0.96.0.md#5-content-formats-s5),
+and what changed in 0.97.0: [docs/docmost-api-v0.97.0.md](docs/docmost-api-v0.97.0.md#3-content-formats).
 
 ### Moving a page
 
@@ -301,9 +302,13 @@ this server's policy. Details in [SECURITY.md](SECURITY.md).
 Docmost has no public API for Community Edition; this project uses its internal API,
 which can change in any release. Each version below has contract fixtures and tests.
 
-| docmost-client | yugen-docmost-mcp | Docmost |
-|----------------|-------------------|---------|
-| 0.1.x | 0.1.x | 0.96.0 |
+| docmost-client | Docmost |
+|----------------|---------|
+| 0.1.0 - 0.1.1 | 0.96.0 |
+| 0.1.2 and later | 0.96.0, 0.97.0 |
+
+`yugen-docmost-mcp` supports the Docmost versions of the `docmost-client` installed with
+it. To use Docmost 0.97.0, upgrade `docmost-client` to 0.1.2 or later.
 
 On the first tool call the server asks Docmost for its version. An untested version is
 refused unless `DOCMOST_ALLOW_UNTESTED_VERSION=1`. If Docmost cannot report its version

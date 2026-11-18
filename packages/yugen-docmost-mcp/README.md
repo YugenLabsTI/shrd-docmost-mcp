@@ -3,7 +3,7 @@
 > **Unofficial, not affiliated with Docmost.**
 
 Security-first MCP server that lets AI agents search, read, and optionally write a
-self-hosted **Docmost Community Edition** wiki (tested with Docmost 0.96.0).
+self-hosted **Docmost Community Edition** wiki (tested with Docmost 0.96.0 and 0.97.0).
 
 ```bash
 DOCMOST_BASE_URL=https://wiki.example.com \

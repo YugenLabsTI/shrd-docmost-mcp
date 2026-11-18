@@ -1,8 +1,9 @@
-"""Record Docmost 0.96.0 responses from the local dev instance as contract fixtures.
+"""Record Docmost responses from the local dev instance as contract fixtures.
 
 Runs as the seeded agent (dev/docmost/.env.test) and writes the unwrapped ``data`` of
-each response to packages/docmost-client/tests/fixtures/v0_96_0/recorded/, plus raw
-error bodies under recorded/errors/. Refuses any non-local base URL. Writes only to the
+each response to packages/docmost-client/tests/fixtures/v<version>/recorded/ (the
+version the local Docmost reports, e.g. v0_97_0), plus raw error bodies under
+recorded/errors/. Refuses any non-local base URL. Writes only to the
 sandbox space.
 
     set -a; . dev/docmost/.env.test; set +a
@@ -20,14 +21,19 @@ import httpx
 from docmost_client import DocmostClient, DocmostSettings, Session
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "packages/docmost-client/tests/fixtures/v0_96_0/recorded"
+FIXTURES = ROOT / "packages/docmost-client/tests/fixtures"
 
 
 def main() -> None:
     settings = DocmostSettings.from_env()
     if urlsplit(settings.base_url).hostname not in {"localhost", "127.0.0.1"}:
         sys.exit("record_fixtures.py only targets a local Docmost.")
-    (OUT / "errors").mkdir(parents=True, exist_ok=True)
+    with Session(settings) as session:
+        version = session.call("/version").get("currentVersion")
+    if not version:
+        sys.exit("The local Docmost did not report its version; run the script again.")
+    out = FIXTURES / f"v{version.replace('.', '_')}" / "recorded"
+    (out / "errors").mkdir(parents=True, exist_ok=True)
 
     with DocmostClient(settings) as client:
         runbook = next(
@@ -40,24 +46,27 @@ def main() -> None:
 
     writable = settings.model_copy(update={"read_only": False})
     with Session(writable) as session:
-        _save("users_me", session.call("/users/me"))
-        _save("version", session.call("/version"))
-        _save("spaces_list", session.call("/spaces", {"limit": 20}))
-        _save("space_info", session.call("/spaces/info", {"spaceId": "engineering"}))
+        _save(out, "users_me", session.call("/users/me"))
+        _save(out, "version", session.call("/version"))
+        _save(out, "spaces_list", session.call("/spaces", {"limit": 20}))
+        _save(out, "space_info", session.call("/spaces/info", {"spaceId": "engineering"}))
         for fmt in ("markdown", "html", "json"):
             _save(
+                out,
                 f"page_info_{fmt}",
                 session.call("/pages/info", {"pageId": runbook.id, "format": fmt}),
             )
         _save(
+            out,
             "sidebar_pages",
             session.call("/pages/sidebar-pages", {"pageId": runbook.id, "limit": 20}),
         )
         _save(
+            out,
             "sidebar_root_pages",
             session.call("/pages/sidebar-pages", {"spaceId": engineering.id, "limit": 20}),
         )
-        _save("search", session.call("/search", {"query": "worker", "limit": 10, "offset": 0}))
+        _save(out, "search", session.call("/search", {"query": "worker", "limit": 10, "offset": 0}))
         created = session.call(
             "/pages/create",
             {
@@ -67,8 +76,9 @@ def main() -> None:
                 "format": "markdown",
             },
         )
-        _save("page_create", created)
+        _save(out, "page_create", created)
         _save(
+            out,
             "page_update",
             session.call(
                 "/pages/update",
@@ -87,20 +97,25 @@ def main() -> None:
             ],
         }
         _save(
+            out,
             "comment_create",
             session.call(
                 "/comments/create",
                 {"pageId": created["id"], "content": json.dumps(doc), "type": "page"},
             ),
         )
-        _save("comments_list", session.call("/comments", {"pageId": created["id"], "limit": 20}))
-        _save("recent_pages", session.call("/pages/recent", {"spaceId": sandbox.id, "limit": 5}))
+        _save(
+            out, "comments_list", session.call("/comments", {"pageId": created["id"], "limit": 20})
+        )
+        _save(
+            out, "recent_pages", session.call("/pages/recent", {"spaceId": sandbox.id, "limit": 5})
+        )
 
-    _record_errors(settings, runbook.id, sandbox.id)
-    print(f"Recorded fixtures into {OUT.relative_to(ROOT)}")
+    _record_errors(out, settings, runbook.id, sandbox.id)
+    print(f"Recorded fixtures into {out.relative_to(ROOT)}")
 
 
-def _record_errors(settings: DocmostSettings, page_id: str, sandbox_id: str) -> None:
+def _record_errors(out: Path, settings: DocmostSettings, page_id: str, sandbox_id: str) -> None:
     """Raw error bodies, which the client never returns as data."""
     password = settings.password.get_secret_value()
     with httpx.Client(base_url=f"{settings.base_url}/api", timeout=60) as http:
@@ -135,29 +150,29 @@ def _record_errors(settings: DocmostSettings, page_id: str, sandbox_id: str) -> 
         }
         for name, (path, payload) in cases.items():
             response = http.post(path, json=payload, headers=auth)
-            _save_error(name, response)
+            _save_error(out, name, response)
         http.post("/auth/logout", headers=auth)
         wrong = {"email": settings.email, "password": "wrong-password"}
-        _save_error("login_rejected", http.post("/auth/login", json=wrong))
+        _save_error(out, "login_rejected", http.post("/auth/login", json=wrong))
         # Last: exceed the login rate limit (10/min/IP). Blocks logins for a minute.
         for _ in range(10):
             response = http.post("/auth/login", json=wrong)
-        _save_error("login_rate_limited", response)
+        _save_error(out, "login_rate_limited", response)
 
 
-def _save(name: str, data: Any) -> None:
-    (OUT / f"{name}.json").write_text(
+def _save(out: Path, name: str, data: Any) -> None:
+    (out / f"{name}.json").write_text(
         json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     )
 
 
-def _save_error(name: str, response: httpx.Response) -> None:
+def _save_error(out: Path, name: str, response: httpx.Response) -> None:
     try:
         body: Any = response.json()
     except ValueError:
         body = response.text[:2000]
     record = {"status": response.status_code, "body": body}
-    (OUT / "errors" / f"{name}.json").write_text(
+    (out / "errors" / f"{name}.json").write_text(
         json.dumps(record, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     )
 

@@ -1,0 +1,8 @@
+{
+  "body": {
+    "error": "Not Found",
+    "message": "Space permissions not found",
+    "statusCode": 404
+  },
+  "status": 404
+}

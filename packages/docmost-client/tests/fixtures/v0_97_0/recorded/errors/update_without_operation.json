@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "Bad Request",
+    "message": [
+      "operation must be one of the following values: append, prepend, replace"
+    ],
+    "statusCode": 400
+  },
+  "status": 400
+}

@@ -1,6 +1,6 @@
 # Local Docmost for development
 
-A disposable Docmost 0.96.0 (with Postgres and Redis) bound to `127.0.0.1:3000`, used to
+A disposable Docmost 0.97.0 (with Postgres and Redis) bound to `127.0.0.1:3000`, used to
 record contract fixtures and run integration tests. Never point these scripts at a
 production instance.
 

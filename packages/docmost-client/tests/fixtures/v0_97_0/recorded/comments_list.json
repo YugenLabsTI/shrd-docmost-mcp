@@ -1,0 +1,48 @@
+{
+  "items": [
+    {
+      "content": {
+        "content": [
+          {
+            "content": [
+              {
+                "text": "Recorded comment.",
+                "type": "text"
+              }
+            ],
+            "type": "paragraph"
+          }
+        ],
+        "type": "doc"
+      },
+      "createdAt": "2026-11-06T17:12:23.458Z",
+      "creator": {
+        "avatarUrl": null,
+        "id": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+        "name": "Agent"
+      },
+      "creatorId": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+      "deletedAt": null,
+      "editedAt": null,
+      "id": "01a1b1d8-e2a2-7c6f-9f85-d414ecbcde40",
+      "lastEditedById": null,
+      "pageId": "01a1b1d8-e20f-7133-a8f4-ae982785e609",
+      "parentCommentId": null,
+      "resolvedAt": null,
+      "resolvedBy": null,
+      "resolvedById": null,
+      "selection": null,
+      "spaceId": "01a1b1d7-b598-72a4-8bef-9d8fa2c19b56",
+      "type": "page",
+      "updatedAt": "2026-11-06T17:12:23.458Z",
+      "workspaceId": "01a1b1d7-b3d8-721d-a4b7-1fa9cf9933a9"
+    }
+  ],
+  "meta": {
+    "hasNextPage": false,
+    "hasPrevPage": false,
+    "limit": 20,
+    "nextCursor": null,
+    "prevCursor": null
+  }
+}

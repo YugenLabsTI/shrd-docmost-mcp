@@ -1,0 +1,48 @@
+{
+  "content": "First line\n\nAppended line",
+  "contributorIds": [
+    "01a1b1d7-b859-745a-884d-2188d1e7b827"
+  ],
+  "contributors": [
+    {
+      "avatarUrl": null,
+      "id": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+      "name": "Agent"
+    }
+  ],
+  "coverPhoto": null,
+  "createdAt": "2026-11-06T17:12:23.310Z",
+  "creator": {
+    "avatarUrl": null,
+    "id": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+    "name": "Agent"
+  },
+  "creatorId": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+  "deletedAt": null,
+  "icon": null,
+  "id": "01a1b1d8-e20f-7133-a8f4-ae982785e609",
+  "isBase": false,
+  "isLocked": false,
+  "lastUpdatedBy": {
+    "avatarUrl": null,
+    "id": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+    "name": "Agent"
+  },
+  "lastUpdatedById": "01a1b1d7-b859-745a-884d-2188d1e7b827",
+  "parentPageId": null,
+  "permissions": {
+    "canEdit": true,
+    "hasRestriction": false
+  },
+  "position": "a17Oh",
+  "slugId": "2R533T9XtC",
+  "space": {
+    "id": "01a1b1d7-b598-72a4-8bef-9d8fa2c19b56",
+    "name": "Sandbox",
+    "slug": "sandbox"
+  },
+  "spaceId": "01a1b1d7-b598-72a4-8bef-9d8fa2c19b56",
+  "title": "Recorded",
+  "updatedAt": "2026-11-06T17:12:23.390Z",
+  "workspaceId": "01a1b1d7-b3d8-721d-a4b7-1fa9cf9933a9"
+}

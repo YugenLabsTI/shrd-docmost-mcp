@@ -30,7 +30,7 @@ body:
     attributes:
       label: Docmost version
       description: The version your Docmost instance runs (ask its administrator if unsure).
-      placeholder: "0.96.0"
+      placeholder: "0.97.0"
     validations:
       required: true
   - type: input

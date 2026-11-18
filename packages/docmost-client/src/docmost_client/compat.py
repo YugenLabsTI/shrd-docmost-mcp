@@ -7,7 +7,7 @@ supported version has contract fixtures under ``tests/fixtures/<version>``.
 from docmost_client.errors import UnsupportedVersionError
 from docmost_client.models import CompatibilityReport
 
-SUPPORTED_DOCMOST_VERSIONS: tuple[str, ...] = ("0.96.0",)
+SUPPORTED_DOCMOST_VERSIONS: tuple[str, ...] = ("0.96.0", "0.97.0")
 
 
 def evaluate(version: str | None, *, allow_untested: bool) -> CompatibilityReport:

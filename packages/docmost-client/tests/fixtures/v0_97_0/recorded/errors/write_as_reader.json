@@ -1,0 +1,7 @@
+{
+  "body": {
+    "message": "Forbidden",
+    "statusCode": 403
+  },
+  "status": 403
+}

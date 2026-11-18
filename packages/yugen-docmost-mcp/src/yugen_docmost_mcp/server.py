@@ -106,8 +106,8 @@ Workflow:
 4. {comment_hint}
 
 Formats: read as markdown to understand a page. Write markdown for new prose. To rewrite a
-rich page (tables, comments, mentions, diagrams, colors), read it as html and replace it
-with edited html: markdown would drop those elements.
+rich page (tables, comments, mentions, diagrams, colors, tabs), read it as html and replace
+it with edited html: markdown would drop those elements or flatten tabs into headings.
 
 Results only cover the spaces this server is allowed to access. Errors carry a stable
 `code`; when `retryable` is true, wait or re-read and try again."""
@@ -412,7 +412,8 @@ def _register_read_tools(server: MCPServer[Any], reader: WikiReader, gate: ToolG
             "Read one page with its content. Returns id, title, space, parent_page_id, "
             "updated_at, is_locked, can_edit, format and content. Keep updated_at: "
             "update_page requires it. Formats: markdown is compact and best for reading "
-            "but drops comments, mentions, colors, diagrams and embeds; html keeps nearly "
+            "but drops comments, mentions, colors, diagrams and embeds and turns tabs into "
+            "headings; html keeps nearly "
             "everything (read html before replacing a rich page); json is the exact "
             "editor document and is large. content is null for an empty page. "
             + _ERRORS

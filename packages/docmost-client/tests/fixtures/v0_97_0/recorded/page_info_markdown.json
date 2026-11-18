@@ -1,0 +1,41 @@
+{
+  "content": "# Runbook\n\nRestart the worker pool when the queue backs up.\n\n- Check metrics\n- Drain the queue",
+  "contributorIds": [],
+  "contributors": [],
+  "coverPhoto": null,
+  "createdAt": "2026-11-06T17:11:07.642Z",
+  "creator": {
+    "avatarUrl": null,
+    "id": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+    "name": "Admin"
+  },
+  "creatorId": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+  "deletedAt": null,
+  "deletedBy": null,
+  "icon": null,
+  "id": "01a1b1d7-ba7a-7fe7-91d0-33b2567b07ae",
+  "isBase": false,
+  "isLocked": false,
+  "lastUpdatedBy": {
+    "avatarUrl": null,
+    "id": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+    "name": "Admin"
+  },
+  "lastUpdatedById": "01a1b1d7-b3cf-7c0c-9753-257a561e898f",
+  "parentPageId": null,
+  "permissions": {
+    "canEdit": false,
+    "hasRestriction": false
+  },
+  "position": "a09z7",
+  "slugId": "xQ5VxtuWAL",
+  "space": {
+    "id": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+    "name": "Engineering",
+    "slug": "engineering"
+  },
+  "spaceId": "01a1b1d7-b589-7fc3-836b-82e0f8120f32",
+  "title": "Runbook",
+  "updatedAt": "2026-11-06T17:11:07.642Z",
+  "workspaceId": "01a1b1d7-b3d8-721d-a4b7-1fa9cf9933a9"
+}
