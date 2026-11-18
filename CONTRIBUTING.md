@@ -87,7 +87,10 @@ pull request does that.
   what an agent could break with it.
 - **Docmost's internal API.** It can change in any release. A new endpoint gets
   recorded fixtures and a contract test; supporting a new Docmost version adds it to the
-  [compatibility](README.md#compatibility) matrix with its own fixtures.
+  [compatibility](README.md#compatibility) matrix with its own fixtures. Once that
+  `docmost-client` release is published, a `fix` pull request raises the
+  `docmost-client` floor of `yugen-docmost-mcp` to it, so upgrading the server brings
+  the new support (the workspace cannot require an unreleased client version).
 
 ## Code review
 
