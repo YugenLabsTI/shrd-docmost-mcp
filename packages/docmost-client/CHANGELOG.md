@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2](https://github.com/YugenLabsTI/shrd-docmost-mcp/compare/docmost-client-v0.1.1...docmost-client-v0.1.2) (2026-11-18)
+
+
+### Features
+
+* **client:** support Docmost 0.97.0 ([5f79f96](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/5f79f96747b8a4962b2419c249692178644fedd6))
+* **client:** support Docmost 0.97.0 ([ce0c85b](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/ce0c85b727b2ed8c52cc73f56bc7af30ab6d56b5)), closes [#64](https://github.com/YugenLabsTI/shrd-docmost-mcp/issues/64)
+
+
+### Documentation
+
+* **client:** key Docmost support by docmost-client version ([f89ab96](https://github.com/YugenLabsTI/shrd-docmost-mcp/commit/f89ab96367d8d5cf36710f6744a881e5f5aea5e1)), closes [#64](https://github.com/YugenLabsTI/shrd-docmost-mcp/issues/64)
+
 ## [0.1.1](https://github.com/YugenLabsTI/shrd-docmost-mcp/compare/docmost-client-v0.1.0...docmost-client-v0.1.1) (2026-10-18)
 
 
